@@ -1,0 +1,7 @@
+.roster_cache/
+.summary_cache/
+*.cache.json
+offline_run_output.json
+*.log
+backup_*
+__pycache__/
