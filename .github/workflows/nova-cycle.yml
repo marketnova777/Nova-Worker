@@ -27,7 +27,7 @@ jobs:
         env:
           BASE44_SERVICE_TOKEN: ${{ secrets.BASE44_SERVICE_TOKEN }}
           BASE44_APP_ID: ${{ secrets.BASE44_APP_ID }}
-        run: python nova/gate.py
+        run: python -m nova.gate
       - name: Kernel self-test (77 checks)
         if: steps.gate.outcome == 'success'
         run: python nova/test_kernel.py

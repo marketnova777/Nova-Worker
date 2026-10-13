@@ -60,4 +60,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as exc:  # fail-open: gate problems must not block cycles
+        print(f"gate: ERROR ({exc}) -> RUN")
+        sys.exit(0)
