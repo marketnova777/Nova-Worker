@@ -7,7 +7,9 @@ import os
 
 # Base44 app (the storefront + database)
 BASE44_APP_ID = os.environ.get("BASE44_APP_ID", "69a8ac47693d18e683d96447")
-BASE44_SERVICE_TOKEN = os.environ["BASE44_SERVICE_TOKEN"]  # required
+BASE44_SERVICE_TOKEN = os.environ.get("BASE44_SERVICE_TOKEN", "")
+# Empty here is fine for offline tests; any real API call without it fails
+# with a clear 401 at request time.
 BASE44_API = f"https://base44.app/api/apps/{BASE44_APP_ID}/entities"
 
 # The Odds API (https://the-odds-api.com) — optional; if absent, odds ingest skips.
