@@ -1,0 +1,41 @@
+name: Nova cycle
+
+# MarketNova external worker — runs the full intelligence cycle off-platform.
+# The gate step (~10s) skips dead overnight runs so a 30-minute cadence
+# stays well inside free Actions minutes.
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch: {}
+
+concurrency:
+  group: nova-cycle
+  cancel-in-progress: false
+
+jobs:
+  cycle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Gate — run only if games are live/upcoming/recently final
+        id: gate
+        continue-on-error: true
+        env:
+          BASE44_SERVICE_TOKEN: ${{ secrets.BASE44_SERVICE_TOKEN }}
+          BASE44_APP_ID: ${{ secrets.BASE44_APP_ID }}
+        run: python nova/gate.py
+      - name: Kernel self-test (77 checks)
+        if: steps.gate.outcome == 'success'
+        run: python nova/test_kernel.py
+      - name: Run Nova cycle
+        if: steps.gate.outcome == 'success'
+        env:
+          BASE44_SERVICE_TOKEN: ${{ secrets.BASE44_SERVICE_TOKEN }}
+          BASE44_APP_ID: ${{ secrets.BASE44_APP_ID }}
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+        run: python run_cycle.py
