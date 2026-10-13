@@ -1,0 +1,1501 @@
+{
+ "summary": {
+  "game_creates": 0,
+  "odds_creates": 8,
+  "read_creates": 0,
+  "puts": 131,
+  "simulated_writes": 155,
+  "simulated_reads": 10
+ },
+ "problems": [],
+ "written": {
+  "Game": [],
+  "OddsSnapshot": [
+   {
+    "id": "local-OddsSnapshot-1",
+    "game_id": "6ace3840052b7ed2abacc521",
+    "snapshot_time": "2026-10-13T15:57:04.566Z",
+    "book": "DraftKings",
+    "market_type": "spread",
+    "is_current": true,
+    "region": "us",
+    "is_stale": false,
+    "is_opening": false,
+    "is_closing": false,
+    "home_line": 3.0,
+    "away_line": -3.0,
+    "home_price": null,
+    "away_price": null
+   },
+   {
+    "id": "local-OddsSnapshot-2",
+    "game_id": "6ace3845c25ee47e4aed3c0b",
+    "snapshot_time": "2026-10-13T15:57:04.566Z",
+    "book": "DraftKings",
+    "market_type": "total",
+    "is_current": true,
+    "region": "us",
+    "is_stale": false,
+    "is_opening": false,
+    "is_closing": false,
+    "over_line": 70.5,
+    "under_line": 70.5,
+    "over_price": null,
+    "under_price": null
+   },
+   {
+    "id": "local-OddsSnapshot-3",
+    "game_id": "6acd1b335e7026f69f94acd0",
+    "snapshot_time": "2026-10-13T15:57:04.566Z",
+    "book": "DraftKings",
+    "market_type": "total",
+    "is_current": true,
+    "region": "us",
+    "is_stale": false,
+    "is_opening": false,
+    "is_closing": false,
+    "over_line": 5.5,
+    "under_line": 5.5,
+    "over_price": null,
+    "under_price": null
+   },
+   {
+    "id": "local-OddsSnapshot-4",
+    "game_id": "6ace385200713cef47997efd",
+    "snapshot_time": "2026-10-13T15:57:04.566Z",
+    "book": "DraftKings",
+    "market_type": "spread",
+    "is_current": true,
+    "region": "us",
+    "is_stale": false,
+    "is_opening": false,
+    "is_closing": false,
+    "home_line": -10.5,
+    "away_line": 10.5,
+    "home_price": null,
+    "away_price": null
+   },
+   {
+    "id": "local-OddsSnapshot-5",
+    "game_id": "6ace385200713cef47997efd",
+    "snapshot_time": "2026-10-13T15:57:04.566Z",
+    "book": "DraftKings",
+    "market_type": "total",
+    "is_current": true,
+    "region": "us",
+    "is_stale": false,
+    "is_opening": false,
+    "is_closing": false,
+    "over_line": 218.5,
+    "under_line": 218.5,
+    "over_price": null,
+    "under_price": null
+   },
+   {
+    "id": "local-OddsSnapshot-6",
+    "game_id": "6ace38524106b496a1e3f896",
+    "snapshot_time": "2026-10-13T15:57:04.566Z",
+    "book": "DraftKings",
+    "market_type": "spread",
+    "is_current": true,
+    "region": "us",
+    "is_stale": false,
+    "is_opening": false,
+    "is_closing": false,
+    "home_line": -9.5,
+    "away_line": 9.5,
+    "home_price": null,
+    "away_price": null
+   },
+   {
+    "id": "local-OddsSnapshot-7",
+    "game_id": "6ace3853756174527b33cfa8",
+    "snapshot_time": "2026-10-13T15:57:04.566Z",
+    "book": "DraftKings",
+    "market_type": "spread",
+    "is_current": true,
+    "region": "us",
+    "is_stale": false,
+    "is_opening": false,
+    "is_closing": false,
+    "home_line": -5.5,
+    "away_line": 5.5,
+    "home_price": null,
+    "away_price": null
+   },
+   {
+    "id": "local-OddsSnapshot-8",
+    "game_id": "6ace3854d6e9b56db93bf561",
+    "snapshot_time": "2026-10-13T15:57:04.566Z",
+    "book": "DraftKings",
+    "market_type": "spread",
+    "is_current": true,
+    "region": "us",
+    "is_stale": false,
+    "is_opening": false,
+    "is_closing": false,
+    "home_line": 1.5,
+    "away_line": -1.5,
+    "home_price": null,
+    "away_price": null
+   }
+  ],
+  "MarketNovaRead": [],
+  "WeatherSnapshot": [
+   {
+    "id": "local-WeatherSnapshot-9",
+    "game_id": "6ace385d7a2d5c389acc2d2a",
+    "league_code": "mlb",
+    "venue": "Dodger Stadium",
+    "roof_type": "outdoor",
+    "roof_status": "open",
+    "temp_f": 61.4,
+    "feels_like_f": 57.4,
+    "humidity_pct": 49.0,
+    "precipitation_pct": 0.0,
+    "wind_speed_mph": 4.8,
+    "wind_direction_deg": 49.0,
+    "wind_direction_text": "NE",
+    "conditions": "Clear",
+    "wind_impact": "minimal",
+    "weather_read": "neutral",
+    "weather_read_rationale": "Clear, 5 mph wind \u2014 conditions are not expected to move the number.",
+    "is_stale": false,
+    "fetched_at": "2026-10-13T15:56:11.796Z"
+   }
+  ],
+  "TravelContext": [
+   {
+    "id": "local-TravelContext-10",
+    "game_id": "6ace385d7a2d5c389acc2d2a",
+    "league_code": "mlb",
+    "team_abbr": "Milwaukee Brewers",
+    "days_rest": 3,
+    "is_back_to_back": false,
+    "previous_venue": "American Family Field",
+    "current_venue": "Dodger Stadium",
+    "updated_at": "2026-10-13T15:56:53.849Z"
+   }
+  ],
+  "Analysis": [
+   {
+    "id": "local-Analysis-11",
+    "game_id": "6ace385d7a2d5c389acc2d2a",
+    "league_code": "mlb",
+    "recommendation": "pass",
+    "game_script_tempo": "NOT PROJECTED",
+    "game_script_notes": "Game script is projected for football matchups from Nova's true line; other sports do not use script templating.",
+    "situational_summary": "Away is on 3 days rest vs 3 for home",
+    "h2h_summary": "Recent-form data not yet available for this matchup.",
+    "public_bias_narrative": "Ticket-split data is not ingested, so no public-percentage claims are made. The number's construction (market -1.5 vs Nova fair -0.0) is the only positioning evidence.",
+    "monitor_trigger": "Re-run when the spread approaches -2.0 on the value side.",
+    "sharp_money_indicators_json": "[]",
+    "is_sample": false
+   }
+  ],
+  "Injury": [
+   {
+    "id": "local-Injury-12",
+    "league_code": "nhl",
+    "source_provider": "ESPN",
+    "player_name": "Jordan Staal",
+    "position": "C",
+    "team_abbr": "CAR",
+    "team_name": "Carolina Hurricanes",
+    "status": "Out",
+    "severity": "high",
+    "impact_rating": 4.0,
+    "injury_type": "Calf",
+    "is_sample": false
+   },
+   {
+    "id": "local-Injury-13",
+    "league_code": "nhl",
+    "source_provider": "ESPN",
+    "player_name": "Mike Matheson",
+    "position": "D",
+    "team_abbr": "MTL",
+    "team_name": "Montreal Canadiens",
+    "status": "Out",
+    "severity": "high",
+    "impact_rating": 4.0,
+    "injury_type": "Lower Body",
+    "is_sample": false
+   }
+  ],
+  "Prop": [
+   {
+    "id": "local-Prop-14",
+    "game_id": "6acd1b3657829c6cf0089f50",
+    "league_code": "NHL",
+    "sport": "nhl",
+    "player_name": "Carter Hart",
+    "player_espn_id": "4064582",
+    "position": "G",
+    "team_abbr": "VGK",
+    "headshot_url": "https://a.espncdn.com/i/headshots/nhl/players/full/4064582.png",
+    "prop_type": "saves",
+    "stat_label": "saves",
+    "baseline_last_game": 24.0,
+    "baseline_source": "last completed game (ESPN boxscore)",
+    "nova_fair_low": 20,
+    "nova_fair_high": 28,
+    "nova_read": "Carter Hart posted 24 saves in the last completed game. Nova projects this game effectively even (true line +0.2) \u2014 competitive script \u2014 no volume distortion expected. Fair range 20-28 (source: last completed game (ESPN boxscore)). Book price not yet ingested \u2014 grade suspended.",
+    "game_script_note": "competitive script \u2014 no volume distortion expected",
+    "status": "MONITOR",
+    "data_confidence": 62,
+    "market_line": null,
+    "market_price": null,
+    "is_current": true
+   },
+   {
+    "id": "local-Prop-15",
+    "game_id": "6acd1b3657829c6cf0089f50",
+    "league_code": "NHL",
+    "sport": "nhl",
+    "player_name": "Tomas Hertl",
+    "player_espn_id": "2976844",
+    "position": "C",
+    "team_abbr": "VGK",
+    "headshot_url": "https://a.espncdn.com/i/headshots/nhl/players/full/2976844.png",
+    "prop_type": "skater_points",
+    "stat_label": "skater points",
+    "baseline_last_game": 1.0,
+    "baseline_source": "last completed game (ESPN boxscore)",
+    "nova_fair_low": 1,
+    "nova_fair_high": 2,
+    "nova_read": "Tomas Hertl posted 1 skater points in the last completed game. Nova projects this game effectively even (true line +0.2) \u2014 competitive script \u2014 no volume distortion expected. Fair range 1-2 (source: last completed game (ESPN boxscore)). Book price not yet ingested \u2014 grade suspended.",
+    "game_script_note": "competitive script \u2014 no volume distortion expected",
+    "status": "MONITOR",
+    "data_confidence": 62,
+    "market_line": null,
+    "market_price": null,
+    "is_current": true
+   },
+   {
+    "id": "local-Prop-16",
+    "game_id": "6acd1b3657829c6cf0089f50",
+    "league_code": "NHL",
+    "sport": "nhl",
+    "player_name": "Brett Howden",
+    "player_espn_id": "4024989",
+    "position": "C",
+    "team_abbr": "VGK",
+    "headshot_url": "https://a.espncdn.com/i/headshots/nhl/players/full/4024989.png",
+    "prop_type": "skater_points",
+    "stat_label": "skater points",
+    "baseline_last_game": 1.0,
+    "baseline_source": "last completed game (ESPN boxscore)",
+    "nova_fair_low": 1,
+    "nova_fair_high": 2,
+    "nova_read": "Brett Howden posted 1 skater points in the last completed game. Nova projects this game effectively even (true line +0.2) \u2014 competitive script \u2014 no volume distortion expected. Fair range 1-2 (source: last completed game (ESPN boxscore)). Book price not yet ingested \u2014 grade suspended.",
+    "game_script_note": "competitive script \u2014 no volume distortion expected",
+    "status": "MONITOR",
+    "data_confidence": 62,
+    "market_line": null,
+    "market_price": null,
+    "is_current": true
+   },
+   {
+    "id": "local-Prop-17",
+    "game_id": "6acd1b357506f7cc37f0b225",
+    "league_code": "NHL",
+    "sport": "nhl",
+    "player_name": "Quinn Hughes",
+    "player_espn_id": "4320548",
+    "position": "D",
+    "team_abbr": "MIN",
+    "headshot_url": "https://a.espncdn.com/i/headshots/nhl/players/full/4320548.png",
+    "prop_type": "skater_points",
+    "stat_label": "skater points",
+    "baseline_last_game": 2.0,
+    "baseline_source": "last completed game (ESPN boxscore)",
+    "nova_fair_low": 2,
+    "nova_fair_high": 3,
+    "nova_read": "Quinn Hughes posted 2 skater points in the last completed game. Nova projects this game effectively even (true line +0.5) \u2014 competitive script \u2014 no volume distortion expected. Fair range 2-3 (source: last completed game (ESPN boxscore)). Book price not yet ingested \u2014 grade suspended.",
+    "game_script_note": "competitive script \u2014 no volume distortion expected",
+    "status": "MONITOR",
+    "data_confidence": 62,
+    "market_line": null,
+    "market_price": null,
+    "is_current": true
+   },
+   {
+    "id": "local-Prop-18",
+    "game_id": "6acd1b337599e3846f36010a",
+    "league_code": "NHL",
+    "sport": "nhl",
+    "player_name": "Michael Amadio",
+    "player_espn_id": "3149829",
+    "position": "RW",
+    "team_abbr": "OTT",
+    "headshot_url": "https://a.espncdn.com/i/headshots/nhl/players/full/3149829.png",
+    "prop_type": "skater_points",
+    "stat_label": "skater points",
+    "baseline_last_game": 1.0,
+    "baseline_source": "last completed game (ESPN boxscore)",
+    "nova_fair_low": 1,
+    "nova_fair_high": 2,
+    "nova_read": "Michael Amadio posted 1 skater points in the last completed game. Nova projects this game effectively even (true line -0.6) \u2014 competitive script \u2014 no volume distortion expected. Fair range 1-2 (source: last completed game (ESPN boxscore)). Book price not yet ingested \u2014 grade suspended.",
+    "game_script_note": "competitive script \u2014 no volume distortion expected",
+    "status": "MONITOR",
+    "data_confidence": 62,
+    "market_line": null,
+    "market_price": null,
+    "is_current": true
+   },
+   {
+    "id": "local-Prop-19",
+    "game_id": "6acd1b2e3fce1a0b68152815",
+    "league_code": "NHL",
+    "sport": "nhl",
+    "player_name": "Nico Daws",
+    "player_espn_id": "4697683",
+    "position": "G",
+    "team_abbr": "NJ",
+    "headshot_url": "https://a.espncdn.com/i/headshots/nhl/players/full/4697683.png",
+    "prop_type": "saves",
+    "stat_label": "saves",
+    "baseline_last_game": 16.0,
+    "baseline_source": "last completed game (ESPN boxscore)",
+    "nova_fair_low": 13,
+    "nova_fair_high": 19,
+    "nova_read": "Nico Daws posted 16 saves in the last completed game. Nova projects this game effectively even (true line -0.6) \u2014 competitive script \u2014 no volume distortion expected. Fair range 13-19 (source: last completed game (ESPN boxscore)). Book price not yet ingested \u2014 grade suspended.",
+    "game_script_note": "competitive script \u2014 no volume distortion expected",
+    "status": "MONITOR",
+    "data_confidence": 62,
+    "market_line": null,
+    "market_price": null,
+    "is_current": true
+   },
+   {
+    "id": "local-Prop-20",
+    "game_id": "6acd1b2e3fce1a0b68152815",
+    "league_code": "NHL",
+    "sport": "nhl",
+    "player_name": "Arseny Gritsyuk",
+    "player_espn_id": "4915855",
+    "position": "RW",
+    "team_abbr": "NJ",
+    "headshot_url": "https://a.espncdn.com/i/headshots/nhl/players/full/4915855.png",
+    "prop_type": "skater_points",
+    "stat_label": "skater points",
+    "baseline_last_game": 1.0,
+    "baseline_source": "last completed game (ESPN boxscore)",
+    "nova_fair_low": 1,
+    "nova_fair_high": 2,
+    "nova_read": "Arseny Gritsyuk posted 1 skater points in the last completed game. Nova projects this game effectively even (true line -0.6) \u2014 competitive script \u2014 no volume distortion expected. Fair range 1-2 (source: last completed game (ESPN boxscore)). Book price not yet ingested \u2014 grade suspended.",
+    "game_script_note": "competitive script \u2014 no volume distortion expected",
+    "status": "MONITOR",
+    "data_confidence": 62,
+    "market_line": null,
+    "market_price": null,
+    "is_current": true
+   },
+   {
+    "id": "local-Prop-21",
+    "game_id": "6acd1b2e3fce1a0b68152815",
+    "league_code": "NHL",
+    "sport": "nhl",
+    "player_name": "Jack Hughes",
+    "player_espn_id": "4565222",
+    "position": "C",
+    "team_abbr": "NJ",
+    "headshot_url": "https://a.espncdn.com/i/headshots/nhl/players/full/4565222.png",
+    "prop_type": "skater_points",
+    "stat_label": "skater points",
+    "baseline_last_game": 1.0,
+    "baseline_source": "last completed game (ESPN boxscore)",
+    "nova_fair_low": 1,
+    "nova_fair_high": 2,
+    "nova_read": "Jack Hughes posted 1 skater points in the last completed game. Nova projects this game effectively even (true line -0.6) \u2014 competitive script \u2014 no volume distortion expected. Fair range 1-2 (source: last completed game (ESPN boxscore)). Book price not yet ingested \u2014 grade suspended.",
+    "game_script_note": "competitive script \u2014 no volume distortion expected",
+    "status": "MONITOR",
+    "data_confidence": 62,
+    "market_line": null,
+    "market_price": null,
+    "is_current": true
+   },
+   {
+    "id": "local-Prop-22",
+    "game_id": "6ac903e3e8d95dd39cfc1b4c",
+    "league_code": "NHL",
+    "sport": "nhl",
+    "player_name": "Carter Hart",
+    "player_espn_id": "4064582",
+    "position": "G",
+    "team_abbr": "VGK",
+    "headshot_url": "https://a.espncdn.com/i/headshots/nhl/players/full/4064582.png",
+    "prop_type": "saves",
+    "stat_label": "saves",
+    "baseline_last_game": 24.0,
+    "baseline_source": "last completed game (ESPN boxscore)",
+    "nova_fair_low": 20,
+    "nova_fair_high": 28,
+    "nova_read": "Carter Hart posted 24 saves in the last completed game. Nova projects Vegas Golden Knights favored by 1.1 \u2014 competitive script \u2014 no volume distortion expected. Fair range 20-28 (source: last completed game (ESPN boxscore)). Book price not yet ingested \u2014 grade suspended.",
+    "game_script_note": "competitive script \u2014 no volume distortion expected",
+    "status": "MONITOR",
+    "data_confidence": 62,
+    "market_line": null,
+    "market_price": null,
+    "is_current": true
+   },
+   {
+    "id": "local-Prop-23",
+    "game_id": "6ac903e3e8d95dd39cfc1b4c",
+    "league_code": "NHL",
+    "sport": "nhl",
+    "player_name": "Tomas Hertl",
+    "player_espn_id": "2976844",
+    "position": "C",
+    "team_abbr": "VGK",
+    "headshot_url": "https://a.espncdn.com/i/headshots/nhl/players/full/2976844.png",
+    "prop_type": "skater_points",
+    "stat_label": "skater points",
+    "baseline_last_game": 1.0,
+    "baseline_source": "last completed game (ESPN boxscore)",
+    "nova_fair_low": 1,
+    "nova_fair_high": 2,
+    "nova_read": "Tomas Hertl posted 1 skater points in the last completed game. Nova projects Vegas Golden Knights favored by 1.1 \u2014 competitive script \u2014 no volume distortion expected. Fair range 1-2 (source: last completed game (ESPN boxscore)). Book price not yet ingested \u2014 grade suspended.",
+    "game_script_note": "competitive script \u2014 no volume distortion expected",
+    "status": "MONITOR",
+    "data_confidence": 62,
+    "market_line": null,
+    "market_price": null,
+    "is_current": true
+   },
+   {
+    "id": "local-Prop-24",
+    "game_id": "6ac903e3e8d95dd39cfc1b4c",
+    "league_code": "NHL",
+    "sport": "nhl",
+    "player_name": "Brett Howden",
+    "player_espn_id": "4024989",
+    "position": "C",
+    "team_abbr": "VGK",
+    "headshot_url": "https://a.espncdn.com/i/headshots/nhl/players/full/4024989.png",
+    "prop_type": "skater_points",
+    "stat_label": "skater points",
+    "baseline_last_game": 1.0,
+    "baseline_source": "last completed game (ESPN boxscore)",
+    "nova_fair_low": 1,
+    "nova_fair_high": 2,
+    "nova_read": "Brett Howden posted 1 skater points in the last completed game. Nova projects Vegas Golden Knights favored by 1.1 \u2014 competitive script \u2014 no volume distortion expected. Fair range 1-2 (source: last completed game (ESPN boxscore)). Book price not yet ingested \u2014 grade suspended.",
+    "game_script_note": "competitive script \u2014 no volume distortion expected",
+    "status": "MONITOR",
+    "data_confidence": 62,
+    "market_line": null,
+    "market_price": null,
+    "is_current": true
+   }
+  ]
+ },
+ "puts": [
+  {
+   "entity": "OddsSnapshot",
+   "id": "6ace38425f7267c5f6acd7bd",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6ace38425f7267c5f6acd7bd",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6ace3843306c687bcaab436f",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6acd1b28bf1fada9ec917ff1",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6acd1b28574ae860b0fef208",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6acd1b2907669a532fefec44",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6acd1b2a2d4763b7c6950ca2",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6acd1b2a783e4bf28f550e41",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6ace384679bfc30af9d0ebbf",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6acd1b2b749ade8debddfbe1",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6acd1b2c0a3f53292b0bfeec",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6ace3847d90f38216bbcd7ec",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6ace38489189722b05b001f4",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6ace3849fd0b2fa72f9cfa90",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6ace384905deadb9df0583ec",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6ace384a2aa0942dd9b3f81d",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6ace384b58ca83976882afa5",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6ace384b58ca83976882afa5",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6acd1b3c2e18b5d798af9ff4",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6ace384f2947d381902e1849",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6acd1b3d725b40ce03d4521d",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6acd1b3e691bfef6cd9cf3d0",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6acd1b3e3479e464f293161d",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6acd1b3fa438c5a393d2fc52",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6acd1b3fcd4ada70eada8e66",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6acd1b40b2ac6439f80322ee",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6acd1b41fc1e370df135cb9a",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6acd1b41e3709cd8f7c7d66d",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6acd1b42e78adbf111760bd0",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6ace38509179b645c643c89b",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6ace38509179b645c643c89b",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6acd1b433c116ea12f91f6af",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6acd1b44077f9031940b48df",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6acd1b4581defb64aa72617a",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6acd1b45c400be34ed9fa7b9",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6acd1b462102ea594fdb5bff",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6acd1b47419a84eb39b2e1cf",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6acd1b471dbf5ac16096b572",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6acd1b48fb72eb82295eb972",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6acd1efa20a16f3b72051893",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6acd1b49594ec293e61cbc3b",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6acd1b4adc731a9eef59876e",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6acd1b4a27ff8875f1f16240",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6acd1b4bdbb9feed870abe11",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6acd1b4b5977832fca5bdd06",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6acd1b4c66e366ba3ee545b4",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6acd1b4dc6f2f70e861f2e92",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6acd1b4d696f9c4968920ed7",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6acd1b4ec5ca3484ff3c8f7f",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6ace3850c5be6140609e624c",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6acd1b4f2193345fb74a90f6",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6ace3855052b7ed2abacc532",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6ace3856bcea0341a3f42ec6",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6ace385775b9adaad96d529c",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6ace385775b9adaad96d529c",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6ace38589b85d0ab09a00f04",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6ace38589b85d0ab09a00f04",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6ace3859b7d25d374dfc8e39",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6ace3859b7d25d374dfc8e39",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6ace385916d49b27615f7d78",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6ace385a9316fe2fee645cfe",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6ace385a9316fe2fee645cfe",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6ace385b9e0f443855436b91",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6ace385b15bba40f9f2a8580",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6ace385b15bba40f9f2a8580",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6ace385c8b87b8448519e401",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6acd1b5926129475b61aab26",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6ace38605b0df3500cc7d624",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6ace38613ed453ab62e8ade0",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "OddsSnapshot",
+   "id": "6ace386137bc9f5236898e12",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "Game",
+   "id": "6ace385d7a2d5c389acc2d2a",
+   "patch": {
+    "home_team_abbr": "LAD",
+    "away_team_abbr": "MIL"
+   }
+  },
+  {
+   "entity": "MarketNovaRead",
+   "id": "6ac90498cac1d4388d4f3d26",
+   "patch": {
+    "is_current": false
+   }
+  },
+  {
+   "entity": "MarketNovaRead",
+   "id": "6acd1b670b5be8eb7b273b5f",
+   "patch": {
+    "what_the_book_is_doing": "The market prices this game at +3.0 while Nova's independent rating work puts the true price at +4.0, a 1.0-point difference. Status: PASS.",
+    "one_line_read": "Market +3.0 vs Nova true +4.0 \u2014 1.0-point gap, status PASS.",
+    "weather": "Clear, 69.7\u00b0F, 3.8 mph wind, 43.0% rain \u2014 neutral",
+    "true_line_basis": "Power ratings Kennesaw State Owls 1.0 vs Missouri State Bears -5.5. home adjustment priced into the +4.0 fair. environment: neutral. Fair range covers \u00b11.0 around +4.0 \u2014 Nova compares the market against the range, not a fake decimal. Data confidence 30/100 (ratings + odds freshness)."
+   }
+  },
+  {
+   "entity": "MarketNovaRead",
+   "id": "6ace38b18720775dd4baf130",
+   "patch": {
+    "what_the_book_is_doing": "The market prices this game at -1.5 while Nova's independent rating work puts the true price at -0.0, a 1.5-point difference. Status: PASS.",
+    "one_line_read": "Market -1.5 vs Nova true -0.0 \u2014 1.5-point gap, status PASS.",
+    "weather": "Clear, 61.4\u00b0F, 4.8 mph wind, 0.0% rain \u2014 neutral",
+    "true_line_basis": "Power ratings Milwaukee Brewers 1.3 vs Los Angeles Dodgers 1.1. home adjustment priced into the -0.0 fair. environment: neutral. Fair range covers \u00b11.0 around -0.0 \u2014 Nova compares the market against the range, not a fake decimal. Data confidence 70/100 (ratings + odds freshness).",
+    "confidence": 70
+   }
+  },
+  {
+   "entity": "MarketNovaRead",
+   "id": "6acd1b7326e9bf20edd1d721",
+   "patch": {
+    "what_the_book_is_doing": "The market prices this game at +1.5 while Nova's independent rating work puts the true price at +0.4, a 1.1-point difference. Status: PASS.",
+    "one_line_read": "Market +1.5 vs Nova true +0.4 \u2014 1.1-point gap, status PASS.",
+    "true_line_basis": "Power ratings Boston Bruins 0.4 vs San Jose Sharks -0.3. home adjustment priced into the +0.4 fair. Fair range covers \u00b11.0 around +0.4 \u2014 Nova compares the market against the range, not a fake decimal. Data confidence 70/100 (ratings + odds freshness).",
+    "confidence": 70
+   }
+  },
+  {
+   "entity": "MarketNovaRead",
+   "id": "6acd1b727a7991c3abf66cd2",
+   "patch": {
+    "what_the_book_is_doing": "The market prices this game at -1.5 while Nova's independent rating work puts the true price at -0.3, a 1.2-point difference. Status: PASS.",
+    "one_line_read": "Market -1.5 vs Nova true -0.3 \u2014 1.2-point gap, status PASS.",
+    "lineup_status": "Injury report synced (1 entries)"
+   }
+  },
+  {
+   "entity": "MarketNovaRead",
+   "id": "6acd1b72749ade8debddfc1d",
+   "patch": {
+    "what_the_book_is_doing": "The market prices this game at +1.5 while Nova's independent rating work puts the true price at +0.4, a 1.1-point difference. Status: PASS.",
+    "one_line_read": "Market +1.5 vs Nova true +0.4 \u2014 1.1-point gap, status PASS."
+   }
+  },
+  {
+   "entity": "MarketNovaRead",
+   "id": "6acd1b7165b90f7693cb3ec3",
+   "patch": {
+    "what_the_book_is_doing": "The market prices this game at -1.5 while Nova's independent rating work puts the true price at -1.1, a 0.5-point difference. Status: PASS.",
+    "one_line_read": "Market -1.5 vs Nova true -1.1 \u2014 0.5-point gap, status PASS.",
+    "lineup_status": "Injury report synced (1 entries)"
+   }
+  },
+  {
+   "entity": "MarketNovaRead",
+   "id": "6acd1b70aae9323123b56ee9",
+   "patch": {
+    "what_the_book_is_doing": "The market prices this game at +1.5 while Nova's independent rating work puts the true price at -0.1, a 1.4-point difference. Status: PASS.",
+    "one_line_read": "Market +1.5 vs Nova true -0.1 \u2014 1.4-point gap, status PASS."
+   }
+  },
+  {
+   "entity": "MarketNovaRead",
+   "id": "6acd1b7193adef34f62fac3d",
+   "patch": {
+    "what_the_book_is_doing": "The market prices this game at +1.5 while Nova's independent rating work puts the true price at +0.2, a 1.3-point difference. Status: PASS.",
+    "one_line_read": "Market +1.5 vs Nova true +0.2 \u2014 1.3-point gap, status PASS.",
+    "lineup_status": "Injury report synced (1 entries)"
+   }
+  },
+  {
+   "entity": "MarketNovaRead",
+   "id": "6acd1b6f720f04b434dd06bc",
+   "patch": {
+    "what_the_book_is_doing": "The market prices this game at +1.5 while Nova's independent rating work puts the true price at +0.9, a 0.6-point difference. Status: PASS.",
+    "one_line_read": "Market +1.5 vs Nova true +0.9 \u2014 0.6-point gap, status PASS."
+   }
+  },
+  {
+   "entity": "MarketNovaRead",
+   "id": "6acd1b6fd482cd4bf6e68427",
+   "patch": {
+    "what_the_book_is_doing": "The market prices this game at -1.5 while Nova's independent rating work puts the true price at +0.5, a 1.0-point difference. Status: PASS.",
+    "one_line_read": "Market -1.5 vs Nova true +0.5 \u2014 1.0-point gap, status PASS."
+   }
+  },
+  {
+   "entity": "MarketNovaRead",
+   "id": "6acd1b6e6051da26ff93f066",
+   "patch": {
+    "what_the_book_is_doing": "The market prices this game at -1.5 while Nova's independent rating work puts the true price at -1.3, a 0.2-point difference. Status: PASS.",
+    "one_line_read": "Market -1.5 vs Nova true -1.3 \u2014 0.2-point gap, status PASS.",
+    "lineup_status": "Injury report synced (1 entries)"
+   }
+  },
+  {
+   "entity": "MarketNovaRead",
+   "id": "6acd1b6d6ae939011e798761",
+   "patch": {
+    "what_the_book_is_doing": "The market prices this game at -1.5 while Nova's independent rating work puts the true price at -0.6, a 0.9-point difference. Status: PASS.",
+    "one_line_read": "Market -1.5 vs Nova true -0.6 \u2014 0.9-point gap, status PASS.",
+    "game_state_support": "St. Louis Blues holds a rest edge (3 days vs 1)",
+    "lineup_status": "Injury report synced (1 entries)"
+   }
+  },
+  {
+   "entity": "MarketNovaRead",
+   "id": "6acd1b6d16da6b7fd3032751",
+   "patch": {
+    "what_the_book_is_doing": "The market prices this game at +1.5 while Nova's independent rating work puts the true price at +0.5, a 1.0-point difference. Status: PASS.",
+    "one_line_read": "Market +1.5 vs Nova true +0.5 \u2014 1.0-point gap, status PASS."
+   }
+  },
+  {
+   "entity": "MarketNovaRead",
+   "id": "6acd1b6cf74f237009c850e2",
+   "patch": {
+    "what_the_book_is_doing": "The market prices this game at -1.5 while Nova's independent rating work puts the true price at -0.6, a 0.9-point difference. Status: PASS.",
+    "one_line_read": "Market -1.5 vs Nova true -0.6 \u2014 0.9-point gap, status PASS."
+   }
+  },
+  {
+   "entity": "MarketNovaRead",
+   "id": "6acd1b6ce5e751459851709e",
+   "patch": {
+    "what_the_book_is_doing": "The market prices this game at -1.5 while Nova's independent rating work puts the true price at -1.2, a 0.3-point difference. Status: PASS.",
+    "one_line_read": "Market -1.5 vs Nova true -1.2 \u2014 0.3-point gap, status PASS.",
+    "lineup_status": "Injury report synced (3 entries)"
+   }
+  },
+  {
+   "entity": "MarketNovaRead",
+   "id": "6acd1b6bc2ac6e6832522d65",
+   "patch": {
+    "what_the_book_is_doing": "The market prices this game at -1.5 while Nova's independent rating work puts the true price at -0.3, a 1.2-point difference. Status: PASS.",
+    "one_line_read": "Market -1.5 vs Nova true -0.3 \u2014 1.2-point gap, status PASS.",
+    "lineup_status": "Injury report synced (2 entries)"
+   }
+  },
+  {
+   "entity": "MarketNovaRead",
+   "id": "6acd1b6a8f96488f940a874d",
+   "patch": {
+    "what_the_book_is_doing": "The market prices this game at -1.5 while Nova's independent rating work puts the true price at -0.6, a 0.9-point difference. Status: PASS.",
+    "one_line_read": "Market -1.5 vs Nova true -0.6 \u2014 0.9-point gap, status PASS.",
+    "lineup_status": "Injury report synced (2 entries)"
+   }
+  },
+  {
+   "entity": "MarketNovaRead",
+   "id": "6acd1b6a5c783f37a0df72f2",
+   "patch": {
+    "what_the_book_is_doing": "The market prices this game at -1.5 while Nova's independent rating work puts the true price at -0.6, a 0.9-point difference. Status: PASS.",
+    "one_line_read": "Market -1.5 vs Nova true -0.6 \u2014 0.9-point gap, status PASS."
+   }
+  },
+  {
+   "entity": "MarketNovaRead",
+   "id": "6acd1b67f698554a99d4a2d0",
+   "patch": {
+    "what_the_book_is_doing": "The market prices this game at -3.0 while Nova's independent rating work puts the true price at -6.7, a 3.7-point difference. Status: LEAN.",
+    "one_line_read": "Market -3.0 vs Nova true -6.7 \u2014 3.7-point gap, status LEAN.",
+    "weather": "Clear, 71.2\u00b0F, 4.2 mph wind, 0.0% rain \u2014 neutral",
+    "lineup_status": "Injury report synced (1 entries)",
+    "true_line_basis": "Power ratings Florida International Panthers 0.6 vs Jacksonville State Gamecocks 4.8. home adjustment priced into the -6.7 fair. environment: neutral. Fair range covers \u00b11.0 around -6.7 \u2014 Nova compares the market against the range, not a fake decimal. Data confidence 30/100 (ratings + odds freshness)."
+   }
+  },
+  {
+   "entity": "MarketNovaRead",
+   "id": "6acd1b66aa3b22e62c6f5c6a",
+   "patch": {
+    "what_the_book_is_doing": "The market prices this game at +1.5 while Nova's independent rating work puts the true price at -1.4, a 0.1-point difference. Status: PASS.",
+    "one_line_read": "Market +1.5 vs Nova true -1.4 \u2014 0.1-point gap, status PASS.",
+    "weather": "Clear, 73.3\u00b0F, 6.3 mph wind, 0.0% rain \u2014 neutral",
+    "true_line_basis": "Power ratings Delaware Blue Hens 2.2 vs Middle Tennessee Blue Raiders 1.1. home adjustment priced into the -1.4 fair. environment: neutral. Fair range covers \u00b11.0 around -1.4 \u2014 Nova compares the market against the range, not a fake decimal. Data confidence 30/100 (ratings + odds freshness)."
+   }
+  },
+  {
+   "entity": "MarketNovaRead",
+   "id": "6ac904a2c0dc0cee10bcf575",
+   "patch": {
+    "what_the_book_is_doing": "The market prices this game at -1.5 while Nova's independent rating work puts the true price at -1.1, a 0.4-point difference. Status: PASS.",
+    "one_line_read": "Market -1.5 vs Nova true -1.1 \u2014 0.4-point gap, status PASS.",
+    "game_state_support": "Los Angeles Kings holds a rest edge (4 days vs 2)",
+    "lineup_status": "Injury report synced (1 entries)"
+   }
+  },
+  {
+   "entity": "MarketNovaRead",
+   "id": "6ac904a1cfb4e49ce6385de2",
+   "patch": {
+    "what_the_book_is_doing": "The market prices this game at +1.5 while Nova's independent rating work puts the true price at -0.3, a 1.2-point difference. Status: PASS.",
+    "one_line_read": "Market +1.5 vs Nova true -0.3 \u2014 1.2-point gap, status PASS.",
+    "lineup_status": "Injury report synced (1 entries)"
+   }
+  },
+  {
+   "entity": "MarketNovaRead",
+   "id": "6ac9049ad4216eef27dcc654",
+   "patch": {
+    "what_the_book_is_doing": "The market prices this game at -21.0 while Nova's independent rating work puts the true price at -17.8, a 3.2-point difference. Status: LEAN.",
+    "one_line_read": "Market -21.0 vs Nova true -17.8 \u2014 3.2-point gap, status LEAN."
+   }
+  },
+  {
+   "entity": "MarketNovaRead",
+   "id": "6ac928796026fbe0318dee6c",
+   "patch": {
+    "what_the_book_is_doing": "The market prices this game at -11.5 while Nova's independent rating work puts the true price at -6.8, a 4.7-point difference. Status: LEAN.",
+    "one_line_read": "Market -11.5 vs Nova true -6.8 \u2014 4.7-point gap, status LEAN."
+   }
+  },
+  {
+   "entity": "MarketNovaRead",
+   "id": "6ac9287b0249ee7cccffc88b",
+   "patch": {
+    "what_the_book_is_doing": "The market prices this game at -5.5 while Nova's independent rating work puts the true price at +0.5, a 5.0-point difference. Status: LEAN.",
+    "one_line_read": "Market -5.5 vs Nova true +0.5 \u2014 5.0-point gap, status LEAN."
+   }
+  },
+  {
+   "entity": "MarketNovaRead",
+   "id": "6ac9287e2c34ab17dab10fae",
+   "patch": {
+    "what_the_book_is_doing": "The market prices this game at -4.5 while Nova's independent rating work puts the true price at -5.0, a 0.5-point difference. Status: PASS.",
+    "one_line_read": "Market -4.5 vs Nova true -5.0 \u2014 0.5-point gap, status PASS."
+   }
+  },
+  {
+   "entity": "MarketNovaRead",
+   "id": "6ac904922fd070f66ae95fc3",
+   "patch": {
+    "what_the_book_is_doing": "The market prices this game at -15.5 while Nova's independent rating work puts the true price at -20.4, a 4.9-point difference. Status: LEAN.",
+    "one_line_read": "Market -15.5 vs Nova true -20.4 \u2014 4.9-point gap, status LEAN.",
+    "game_state_support": "Utah holds a rest edge (14 days vs 7)"
+   }
+  },
+  {
+   "entity": "WeatherSnapshot",
+   "id": "6ace38cacd3db631720866c3",
+   "patch": {
+    "temp_f": 69.7,
+    "feels_like_f": 75.0,
+    "wind_speed_mph": 3.8,
+    "precipitation_pct": 43.0,
+    "conditions": "Clear"
+   }
+  },
+  {
+   "entity": "WeatherSnapshot",
+   "id": "6ace38c915964ad8eab33c65",
+   "patch": {
+    "temp_f": 73.3,
+    "feels_like_f": 75.3,
+    "wind_speed_mph": 8.6,
+    "humidity_pct": 76.0
+   }
+  },
+  {
+   "entity": "WeatherSnapshot",
+   "id": "6acd1f454e09864ad6102587",
+   "patch": {
+    "temp_f": 71.2,
+    "feels_like_f": 70.2,
+    "humidity_pct": 52.0
+   }
+  },
+  {
+   "entity": "WeatherSnapshot",
+   "id": "6acd1f45a58a5a9ffe045e89",
+   "patch": {
+    "temp_f": 73.3,
+    "feels_like_f": 74.9,
+    "humidity_pct": 68.0
+   }
+  },
+  {
+   "entity": "Analysis",
+   "id": "6acd1f871b5b1fadd587e000",
+   "patch": {
+    "public_bias_narrative": "Ticket-split data is not ingested, so no public-percentage claims are made. The number's construction (market +1.5 vs Nova fair +0.4) is the only positioning evidence.",
+    "monitor_trigger": "Re-run when the spread approaches +2.4 on the value side.",
+    "sharp_money_indicators_json": "[{\"type\": \"line_move\", \"detail\": \"Spread opened -1.5, now +1.5 (3.0 toward away across 10 snapshots)\", \"claim\": \"observed movement \\u2014 causation unconfirmed\"}]"
+   }
+  },
+  {
+   "entity": "Analysis",
+   "id": "6acd1f84a9b06beee7474f2e",
+   "patch": {
+    "public_bias_narrative": "Ticket-split data is not ingested, so no public-percentage claims are made. The number's construction (market +1.5 vs Nova fair -0.1) is the only positioning evidence.",
+    "monitor_trigger": "Re-run when the spread approaches +1.9 on the value side.",
+    "sharp_money_indicators_json": "[{\"type\": \"line_move\", \"detail\": \"Spread opened -1.5, now +1.5 (3.0 toward away across 10 snapshots)\", \"claim\": \"observed movement \\u2014 causation unconfirmed\"}]"
+   }
+  },
+  {
+   "entity": "Injury",
+   "id": "6acd19d7b1d51e5ffeb3df44",
+   "patch": {
+    "status": "Out",
+    "severity": "high",
+    "injury_type": "Knee Not Specified",
+    "impact_rating": 4.0
+   }
+  },
+  {
+   "entity": "Injury",
+   "id": "6acd19d7efbd01e94113f4f8",
+   "patch": {
+    "status": "Out",
+    "severity": "high",
+    "impact_rating": 4.0
+   }
+  },
+  {
+   "entity": "Injury",
+   "id": "6acd19d99e8997913a38954f",
+   "patch": {
+    "status": "Out",
+    "severity": "high",
+    "impact_rating": 4.0
+   }
+  },
+  {
+   "entity": "Injury",
+   "id": "6ac930868e8d3598c3cc460c",
+   "patch": {
+    "severity": "moderate"
+   }
+  },
+  {
+   "entity": "Injury",
+   "id": "6ac93089d593ea3d7e0c96d7",
+   "patch": {
+    "severity": "high"
+   }
+  },
+  {
+   "entity": "Injury",
+   "id": "6ac93088396cb83be97f804a",
+   "patch": {
+    "status": "Out",
+    "severity": "high",
+    "impact_rating": 4.0
+   }
+  },
+  {
+   "entity": "Injury",
+   "id": "6ac9309d4211b3ed934020ef",
+   "patch": {
+    "severity": "high"
+   }
+  },
+  {
+   "entity": "Injury",
+   "id": "6ac930a55683e82c19f2a0e9",
+   "patch": {
+    "severity": "high"
+   }
+  },
+  {
+   "entity": "Injury",
+   "id": "6ac930a6ca5bf83c94ce3c25",
+   "patch": {
+    "severity": "high"
+   }
+  },
+  {
+   "entity": "Injury",
+   "id": "6ac930a78a0924f24b3ab9db",
+   "patch": {
+    "severity": "high"
+   }
+  },
+  {
+   "entity": "Injury",
+   "id": "6ac930a890946d28d8c38e64",
+   "patch": {
+    "severity": "high"
+   }
+  },
+  {
+   "entity": "Injury",
+   "id": "6ac10b50c045b4e8bd07b5a9",
+   "patch": {
+    "status": "Out",
+    "severity": "high",
+    "injury_type": "Foot",
+    "impact_rating": 4.0
+   }
+  },
+  {
+   "entity": "Injury",
+   "id": "6ac930a9548b00e56f4fa41d",
+   "patch": {
+    "severity": "high"
+   }
+  },
+  {
+   "entity": "Injury",
+   "id": "6ac930aaf1b4189c4b6e694e",
+   "patch": {
+    "severity": "high"
+   }
+  },
+  {
+   "entity": "Injury",
+   "id": "6ac930ab0282548297a04c69",
+   "patch": {
+    "severity": "high"
+   }
+  },
+  {
+   "entity": "Injury",
+   "id": "6ac930ab363c7094d12bd5cd",
+   "patch": {
+    "severity": "high"
+   }
+  },
+  {
+   "entity": "Injury",
+   "id": "6ac930ace27a5d8413212fdd",
+   "patch": {
+    "severity": "high"
+   }
+  },
+  {
+   "entity": "Injury",
+   "id": "6ac930adce893286a8f93f49",
+   "patch": {
+    "severity": "high"
+   }
+  },
+  {
+   "entity": "Injury",
+   "id": "6ac930ae724fde82eec3187d",
+   "patch": {
+    "severity": "high"
+   }
+  },
+  {
+   "entity": "Injury",
+   "id": "6ac930af5541d36f0f7465e4",
+   "patch": {
+    "severity": "high"
+   }
+  },
+  {
+   "entity": "Injury",
+   "id": "6ac930afe6d874685a3233f6",
+   "patch": {
+    "severity": "high"
+   }
+  },
+  {
+   "entity": "Injury",
+   "id": "6ac930b08cd4c1a4f5aed26f",
+   "patch": {
+    "severity": "high"
+   }
+  },
+  {
+   "entity": "Injury",
+   "id": "6ac930b5bc5343a068901a84",
+   "patch": {
+    "severity": "high"
+   }
+  },
+  {
+   "entity": "Prop",
+   "id": "6ace3937731a1c7495f4198e",
+   "patch": {
+    "nova_fair_low": 18,
+    "nova_fair_high": 25,
+    "nova_read": "Jesper Wallstedt posted 21 saves in the last completed game. Nova projects this game effectively even (true line +0.5) \u2014 competitive script \u2014 no volume distortion expected. Fair range 18-25 (source: last completed game (ESPN boxscore)). Book price not yet ingested \u2014 grade suspended.",
+    "baseline_last_game": 21.0
+   }
+  },
+  {
+   "entity": "Prop",
+   "id": "6ace393944c662d9d5d344e1",
+   "patch": {
+    "nova_fair_low": 1,
+    "nova_fair_high": 2,
+    "nova_read": "Matt Boldy posted 1 skater points in the last completed game. Nova projects this game effectively even (true line +0.5) \u2014 competitive script \u2014 no volume distortion expected. Fair range 1-2 (source: last completed game (ESPN boxscore)). Book price not yet ingested \u2014 grade suspended.",
+    "baseline_last_game": 1.0
+   }
+  },
+  {
+   "entity": "Prop",
+   "id": "6ace393df057b653ae169ae3",
+   "patch": {
+    "nova_fair_low": 24,
+    "nova_fair_high": 34,
+    "nova_read": "Linus Ullmark posted 29 saves in the last completed game. Nova projects this game effectively even (true line -0.6) \u2014 competitive script \u2014 no volume distortion expected. Fair range 24-34 (source: last completed game (ESPN boxscore)). Book price not yet ingested \u2014 grade suspended.",
+    "baseline_last_game": 29.0
+   }
+  }
+ ]
+}
