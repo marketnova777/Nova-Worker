@@ -447,6 +447,57 @@ check("weather-only context renders weather without any injury/probable lines",
                               context={"injuries_away": [], "injuries_home": [], "probables": None}),
       "team_context" in _pwo and "Injury" not in _pwo["team_context"] and "Probable" not in _pwo["team_context"])
 
+# ---- postgame grading (nova/grades.py — the learning loop) ----
+from nova import grades as _gr
+from datetime import datetime, timezone as _tz
+_g_now = datetime(2026, 10, 14, 20, 0, tzinfo=_tz.utc)
+_g_game = {"id": "g1", "status": "final", "home_score": 27.0, "away_score": 20.0,
+           "start_time": "2026-10-13T01:00:00Z"}
+_g_read = {"id": "r1", "game_id": "g1", "market_type": "spread", "is_current": False,
+          "status": "LEAN", "true_line_value": -4.0, "market_line": -2.0,
+          "edge_direction": "NOVA_FAVORS_HOME", "final_read_json": None}
+_g_odds = [{"market_type": "spread", "home_line": -3.5, "snapshot_time": "2026-10-13T00:30:00Z"},
+           {"market_type": "spread", "home_line": -1.5, "snapshot_time": "2026-10-12T20:00:00Z"}]
+_gp = _gr.grade_read(_g_game, _g_read, _g_odds, now=_g_now)
+_g_game2 = {"id": "g2", "status": "final", "home_score": 10.0, "away_score": 15.0,
+            "start_time": "2026-10-13T01:00:00Z"}
+_gp = _gr.grade_read(_g_game2, _g_read, _g_odds, now=_g_now)  # margin -5: model closer
+check("grade computes margin and calibration (model -4 vs market -2, margin -5)",
+      _gp["margin"] == -5.0 and _gp["model_error"] == 1.0 and _gp["market_error"] == 3.0
+      and _gp["calibration_winner"] == "MODEL")
+check("grade CLV: home entry -2.0, close -3.5 -> +1.5 pts beat-to-close",
+      _gp["closing_line"] == -3.5 and _gp["clv_points"] == 1.5)
+check("grade value result: home -2 did not cover at margin -5 (honest loss)",
+      _gp["value_result"] == "LOST" and _gp["value_side"] == "HOME")
+check("closing_line ignores snapshots after kickoff",
+      _gr.closing_line(_g_odds, kickoff=datetime(2026, 10, 13, 0, 0, tzinfo=_tz.utc)) == -1.5)
+# away side + loss + negative CLV
+_gp2 = _gr.grade_read(_g_game, {**_g_read, "id": "r2", "edge_direction": "NOVA_FAVORS_AWAY"},
+                       _g_odds, now=_g_now)
+check("away-side CLV sign flips (close - entry) and away lost the cover",
+      _gp2["clv_points"] == -1.5 and _gp2["value_result"] == "LOST")
+# missing inputs stay honest
+_gp3 = _gr.grade_read({**_g_game, "away_score": None}, _g_read, _g_odds, now=_g_now)
+check("missing score -> no grade at all (never guessed)",
+      _gp3 is None)
+_gp4 = _gr.grade_read(_g_game, {**_g_read, "id": "r4", "true_line_value": None},
+                      [], now=_g_now)
+check("missing lines -> explicit skip note, no fake numbers",
+      _gp4["graded"] is True and "calibration_winner" not in _gp4
+      and "skipped" in _gp4.get("notes", ""))
+# idempotence via grade_finals
+_gf = _gr.grade_finals([_g_game], [{**_g_read, "final_read_json": _json.dumps(_gp)}],
+                       {"g1": _g_odds}, now=_g_now)
+check("grade_finals skips reads already graded",
+      len(_gf) == 0)
+_gf2 = _gr.grade_finals([_g_game], [_g_read], {"g1": _g_odds}, now=_g_now)
+check("grade_finals grades an ungraded final read",
+      len(_gf2) == 1 and _gf2[0][0] == "r1")
+_cs = _gr.calibration_summary([_gp, _gp2])
+check("calibration_summary aggregates model-closer record and CLV",
+      _cs["graded"] == 2 and _cs["model_closer"] == 1 and _cs["market_closer"] == 1
+      and _cs["value_record"] == {"LOST": 2})
+
 # json roundtrip guard for changed_fields (api.py canonical compare)
 from nova.api import changed_fields as _cf
 check("changed_fields ignores json string-vs-object roundtrip",

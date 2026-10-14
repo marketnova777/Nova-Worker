@@ -17,7 +17,7 @@ from zoneinfo import ZoneInfo
 import json
 import sys
 
-from nova import config, espn, odds, reads, llm, enrich, props, web, answers
+from nova import config, espn, odds, reads, llm, enrich, props, web, answers, grades
 from nova.api import Base44Client, changed_fields
 
 
@@ -56,7 +56,8 @@ def run(dry=None):
     forms = client.list_all("TeamForm")
     existing_reads = client.list_all("MarketNovaRead", fields=[
         "id", "game_id", "market_type", "is_current", "status",
-        "marketnova_true_line", "raw_edge", "what_the_book_is_doing", "one_line_read"])
+        "marketnova_true_line", "raw_edge", "what_the_book_is_doing", "one_line_read",
+        "true_line_value", "market_line", "edge_direction", "final_read_json"])
     existing_weather = client.list_all("WeatherSnapshot", fields=["id", "game_id", "created_date"])
     existing_travel = client.list_all("TravelContext", fields=["id", "game_id", "team_abbr", "days_rest"])
     existing_analysis = client.list_all("Analysis", fields=["id", "game_id", "created_date"])
@@ -475,6 +476,24 @@ def run(dry=None):
                     web.league_news(lg_code.lower()), context=_pack_ctx(payload)),
             }))
     log("read", f"{len(read_patches)} reads to write")
+
+    # ---------- postgame grading (learning loop: calibration + CLV) ----------
+    try:
+        grade_pairs = grades.grade_finals(games, existing_reads, odds_by_game)
+        if grade_pairs:
+            summary = grades.calibration_summary(
+                [p for _, p in grade_pairs])
+            log("grades", f"{len(grade_pairs)} reads graded: "
+                  f"model closer {summary.get('model_closer', 0)}, "
+                  f"market closer {summary.get('market_closer', 0)}, "
+                  f"avg CLV {summary.get('avg_clv_points')} pts")
+            client.bulk_put("MarketNovaRead",
+                            [(rid, {"final_read_json": json.dumps(p)})
+                             for rid, p in grade_pairs])
+        else:
+            log("grades", "no ungraded final-game reads in window")
+    except Exception as e:
+        log("grades", f"grading failed (non-fatal): {e}")
 
     # ---------- Write phase ----------
     if dry:
