@@ -109,7 +109,8 @@ def collect_events(league, days):
     events = []
     from datetime import timezone as _tz
     today = datetime.now(_tz.utc).date()
-    for delta in range(-1, days + 1):
+    back = int(getattr(config, "RECONCILE_BACK_DAYS", 5))
+    for delta in range(-back, days + 1):
         d = today + timedelta(days=delta)
         try:
             data = scoreboard(league, d)

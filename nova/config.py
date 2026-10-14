@@ -25,6 +25,7 @@ LLM_MODEL = os.environ.get("LLM_MODEL", "claude-haiku-4-5")
 LEAGUES = [l.strip().lower() for l in os.environ.get(
     "NOVA_LEAGUES", "nfl,ncaaf,nhl,nba,ncaab,wnba,mlb").split(",") if l.strip()]
 LOOKAHEAD_DAYS = int(os.environ.get("NOVA_LOOKAHEAD_DAYS", "2"))
+RECONCILE_BACK_DAYS = int(os.environ.get("NOVA_RECONCILE_BACK_DAYS", "5"))  # past-game status sync window
 DRY_RUN = os.environ.get("NOVA_DRY_RUN", "") == "1"
 
 # Write throttling (be a polite client; keep Base44 API calls minimal)

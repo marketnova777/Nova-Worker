@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 
 from nova.api import Base44Client
 
-GATE_UPCOMING_H = float(os.environ.get("GATE_UPCOMING_H", "8"))
+GATE_UPCOMING_H = float(os.environ.get("GATE_UPCOMING_H", "24"))
 GATE_FINAL_H = float(os.environ.get("GATE_FINAL_H", "3"))
 
 LIVE = {"live", "in_progress", "halftime", "second_half", "q1", "q2", "q3", "q4",

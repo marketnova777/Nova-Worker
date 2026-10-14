@@ -517,7 +517,10 @@ def decide(*, true_price: TruePrice, market_line: float,
                               "HIGH", "INFORMATION_INCOMPLETE", 0.0, 0.0, 0.0, [], gates)
     # raw edge (points)
     if market in ("pregame_spread",):
-        raw_edge = round(abs(abs(market_line) - abs(true_price.spread)), 2)
+        # Signed edge: sign flips are huge disagreements, not collapsed
+        # abs differences. A market of -6.5 vs a true line of +14.0 is a
+        # 20.5-point conflict (caught by the sanity gate), not 7.5.
+        raw_edge = round(abs(market_line - true_price.spread), 2)
     else:
         raw_edge = round(abs(market_line - true_price.total), 2)
     edge_score = raw_edge * 2          # composite 0-10 (MINIMUM_EDGE gate operates on this)

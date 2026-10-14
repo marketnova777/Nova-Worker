@@ -305,6 +305,11 @@ check("sign-flip trap: abs math fakes 2 but real disagreement is 8",
 check("reads direction rule: line > true -> favorite, line < true -> dog",
       ("favorite" if -1.0 > -5.0 else "dog") == "favorite" and
       ("favorite" if -9.0 > -5.0 else "dog") == "dog")
+tp_flip = build_true_price(team_power_gap=-14.0, expected_pace_points=45, home_field=2.0)
+tp_flip.spread = 14.0
+d_flip = decide(true_price=tp_flip, market_line=-6.5, market="pregame_spread", direction="dog")
+check("sign-flip magnitude: true +14 vs market -6.5 raw edge is 20.5, never 7.5",
+      d_flip.raw_edge == 20.5)
 
 print()
 print("-- game theory refinements: juice pressure + lifecycle --")
