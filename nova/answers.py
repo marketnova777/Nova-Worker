@@ -41,7 +41,7 @@ def _team(game, side):
             or side.upper())
 
 
-def build_pack(game, result, narrative, news=None):
+def build_pack(game, result, narrative, news=None, context=None):
     """Return the answer-pack dict for one read, or None if nothing
     useful can be said (all fields missing). AWAITING DATA gets honest
     per-intent answers, not generic filler."""
@@ -114,12 +114,38 @@ def build_pack(game, result, narrative, news=None):
     # headline lookup failed or league unsupported — omit the intent
     # entirely rather than print stale filler
 
+    # ---- team context: real injury / probable-starter / weather data.
+    # context is None when the fetch failed — omit the intent entirely
+    # (never print "no injuries" when Nova simply could not look).
+    if context is not None:
+        away = _team(game, "away")
+        home = _team(game, "home")
+        lines = []
+        inj_a = context.get("injuries_away") or []
+        inj_h = context.get("injuries_home") or []
+        if inj_a or inj_h:
+            lines.append("Injury report (ESPN, fetched this cycle):")
+            if inj_a:
+                lines.append(f"  {away}: " + "; ".join(inj_a[:6]))
+            if inj_h:
+                lines.append(f"  {home}: " + "; ".join(inj_h[:6]))
+        prob = context.get("probables")
+        if prob:
+            lines.append(f"Probable starters (ESPN): {prob}")
+        wx = (result.get("weather") or "").strip()
+        if wx:
+            lines.append(f"Weather: {wx}")
+        if lines:
+            lines.append("Context feeds the true line — it is not a bet "
+                         "signal on its own.")
+            pack["team_context"] = "\n".join(lines)
+
     return pack or None
 
 
-def pack_json(game, result, narrative, news=None):
+def pack_json(game, result, narrative, news=None, context=None):
     """Serialized answer pack for MarketNovaRead.thesis_json, or None."""
-    pack = build_pack(game, result, narrative, news)
+    pack = build_pack(game, result, narrative, news, context)
     if not pack:
         return None
     try:

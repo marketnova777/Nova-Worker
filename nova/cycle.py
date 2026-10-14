@@ -13,6 +13,7 @@ Write budget doctrine: a quiet board should cost single-digit writes.
 Every write is a true delta (changed fields only), verified before dispatch.
 """
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 import json
 import sys
 
@@ -132,16 +133,46 @@ def run(dry=None):
     current_reads, stale_read_ids = {}, []
     seen_read_games = set()
     rest_maps, weather_by_game, injury_count = {}, {}, {}
+    inj_by_team, inj_ok_leagues = {}, set()
     analysis_upserts, travel_upserts, prop_payloads = [], [], []
     props_ctx = {}
     skip_status = ("final",) + tuple(config.TERMINAL_EXEMPT)
 
     # ---- enrichment: weather + injuries (free ESPN/open-meteo, no LLM) ----
-    venue_by_espn = {}
+    venue_by_espn, probables_by_espn = {}, {}
     for league, recs in espn_recs_by_league.items():
         for rec in recs:
             if rec.get("espn_id"):
                 venue_by_espn[rec["espn_id"]] = rec
+                if rec.get("probables"):
+                    probables_by_espn[rec["espn_id"]] = rec["probables"]
+
+    def _pack_ctx(g):
+        """Honest per-game context for the answer pack. None = omit intent
+        (the injury fetch failed), never a false 'no injuries' claim."""
+        lg = str(g.get("league_code") or "").lower()
+        if lg not in inj_ok_leagues:
+            return None
+        ctx = {}
+        for side in ("away", "home"):
+            ab = g.get(f"{side}_team_abbr")
+            ctx[f"injuries_{side}"] = inj_by_team.get((lg, ab), []) if ab else []
+        prob = None
+        plist = probables_by_espn.get(g.get("provider_game_id")) or []
+        if plist:
+            parts = []
+            for p in plist:
+                t = str(p.get("team_abbr") or "").upper()
+                nm = p.get("name")
+                if t == str(g.get("away_team_abbr") or "").upper():
+                    parts.append(f"{nm} ({g.get('away_team')} {t})")
+                elif t == str(g.get("home_team_abbr") or "").upper():
+                    parts.append(f"{nm} ({g.get('home_team')} {t})")
+                else:
+                    parts.append(str(nm))
+            prob = " vs ".join(parts)
+        ctx["probables"] = prob
+        return ctx
     weather_games = []
     for g in games:
         rec = venue_by_espn.get(g.get("provider_game_id"))
@@ -183,6 +214,14 @@ def run(dry=None):
             continue
         for p in plist:
             injury_upserts.append(p)
+            inj_ok_leagues.add(p["league_code"])
+        for p in plist:
+            key = (p["league_code"], p["team_abbr"])
+            txt = p["player_name"] + " (" + (p.get("position") or "—") + ", " + str(p.get("status") or "?")
+            if p.get("injury_type"):
+                txt += ": " + str(p["injury_type"])[:60]
+            txt += ")"
+            inj_by_team.setdefault(key, []).append(txt)
         log("enrich", f"{league}: {len(plist)} injury rows for {len(wteams)//2} games")
     for p in injury_upserts:
         for g in games:
@@ -314,7 +353,8 @@ def run(dry=None):
             # worker-written answer pack (Python-generated answers;
             # novaChat renders these — zero Base44 AI credits)
             "thesis_json": answers.pack_json(g, result, result,
-                                              news_by_league.get(league_l)),
+                                              news_by_league.get(league_l),
+                                              context=_pack_ctx(g)),
             "thesis": result.get("thesis"),
             "nova_read": result.get("nova_read"),
             "risk": result.get("risk"),
@@ -430,8 +470,9 @@ def run(dry=None):
                 "data_confidence": result.get("data_confidence"),
                 "what_the_book_is_doing": doing,
                 "one_line_read": one_line,
-                "thesis_json": answers.pack_json(payload, result, result,
-                                                  web.league_news(lg_code.lower())),
+                "thesis_json": answers.pack_json(
+                    payload, result, result,
+                    web.league_news(lg_code.lower()), context=_pack_ctx(payload)),
             }))
     log("read", f"{len(read_patches)} reads to write")
 

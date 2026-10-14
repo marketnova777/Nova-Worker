@@ -62,6 +62,15 @@ def parse_event(ev):
         }
     venue = comp.get("venue") or {}
     vaddr = venue.get("address") or {}
+    probables = []
+    for pr in comp.get("probables") or []:
+        a = (pr or {}).get("athlete") or {}
+        t = (pr or {}).get("team") or {}
+        nm = a.get("displayName")
+        if nm:
+            probables.append({"name": nm,
+                              "team_abbr": t.get("abbreviation"),
+                              "note": a.get("shortComment") or None})
     return {
         "odds": rec_odds,
         "espn_id": ev.get("id"),
@@ -78,6 +87,7 @@ def parse_event(ev):
         "venue_city": vaddr.get("city"),
         "venue_state": vaddr.get("state"),
         "venue_indoor": bool(venue.get("indoor")),
+        "probables": probables or None,
     }
 
 

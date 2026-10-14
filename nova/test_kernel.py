@@ -424,6 +424,29 @@ check("web fetch_url fails honest on 4xx (None, no raise)",
       _web.fetch_url("https://site.api.espn.com/apis/badpath/zzz") is None)
 check("league_news returns [] for unknown leagues",
       _web.league_news("not-a-league") == [])
+# team_context intent (real injury/probable/weather data in packs)
+_ctx = {"injuries_away": ["Jayson Tatum (SF, Out: knee)"],
+        "injuries_home": [], "probables": "Tyler Seguin (DAL) vs Nathan MacKinnon (COL)"}
+_ap_r2 = dict(_ap_r); _ap_r2.update({"status": "PASS", "true_line": -2.5,
+    "market_line": -2.0, "edge_value": 0.5,
+    "weather": "Clear, 55F, 8 mph wind — neutral"})
+_pctx = _ans.build_pack(_ap_g, _ap_r2, _ap_r2, news=None, context=_ctx)
+check("team_context renders injuries + probables + weather",
+      "team_context" in _pctx and "Jayson Tatum" in _pctx["team_context"]
+      and "Probable starters" in _pctx["team_context"] and "Weather:" in _pctx["team_context"])
+check("team_context carries the doctrine disclaimer",
+      "not a bet signal" in _pctx["team_context"])
+check("context=None omits team_context entirely (fetch failed, never fake 'no injuries')",
+      "team_context" not in _ans.build_pack(_ap_g, _ap_r2, _ap_r2, news=None, context=None))
+_ap_r_nowx = dict(_ap_r2); _ap_r_nowx["weather"] = None
+check("empty context + no weather -> team_context omitted (nothing to say, nothing invented)",
+      "team_context" not in _ans.build_pack(_ap_g, _ap_r_nowx, _ap_r_nowx, news=None,
+                                            context={"injuries_away": [], "injuries_home": [], "probables": None}))
+check("weather-only context renders weather without any injury/probable lines",
+      _pwo := _ans.build_pack(_ap_g, _ap_r2, _ap_r2, news=None,
+                              context={"injuries_away": [], "injuries_home": [], "probables": None}),
+      "team_context" in _pwo and "Injury" not in _pwo["team_context"] and "Probable" not in _pwo["team_context"])
+
 # json roundtrip guard for changed_fields (api.py canonical compare)
 from nova.api import changed_fields as _cf
 check("changed_fields ignores json string-vs-object roundtrip",
