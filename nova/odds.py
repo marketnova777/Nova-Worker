@@ -206,6 +206,8 @@ def plan(games, existing_odds, desired_rows, league):
                 "sport": league.upper(),
                 "home_team": row["home_team"],
                 "away_team": row["away_team"],
+                "home_team_abbr": row.get("home_team_abbr"),
+                "away_team_abbr": row.get("away_team_abbr"),
                 "start_time": row["commence_time"],
                 # legacy board-bucket field — the board filters on game_date;
                 # null hides worker-created games (US/Eastern convention,
