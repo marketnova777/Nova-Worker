@@ -366,6 +366,11 @@ def run(dry=None):
                 "why_market_here", "thesis", "nova_read", "risk", "buy_to", "thesis_json",
                 "regression_notes", "market_tape", "true_line_basis",
                 "value_window", "confidence"])
+            # self-heal: reads written before answer packs existed carry no
+            # thesis_json; if fields are otherwise unchanged the read would
+            # never be rewritten — force the pack in so no read is pack-less
+            if not patch and not cur.get("thesis_json") and desired_read.get("thesis_json"):
+                patch = {"thesis_json": desired_read["thesis_json"]}
             if patch:
                 read_patches.append((cur["id"], g["id"], patch))
     # first-cycle reads for games created THIS run — they'd otherwise sit
