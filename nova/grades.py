@@ -20,6 +20,10 @@ original thesis fields are never rewritten (Part LXI: freeze the thesis).
 import json
 from datetime import datetime, timedelta, timezone
 
+# Bump when grade derivation changes (e.g. value-side fix Oct 14):
+# reads graded under an older version are re-graded next cycle.
+GRADE_VERSION = 2
+
 
 def _f(v):
     try:
@@ -35,7 +39,8 @@ def _already_graded(read):
             frj = json.loads(frj)
         except (ValueError, TypeError):
             return False
-    return isinstance(frj, dict) and frj.get("graded") is True
+    return (isinstance(frj, dict) and frj.get("graded") is True
+            and frj.get("grade_version") == GRADE_VERSION)
 
 
 def _stamp(o):
@@ -80,7 +85,8 @@ def grade_read(game, read, odds_rows, now=None):
                    or read.get("marketnova_true_line"))
     entry = _f(read.get("market_line"))
     status = str(read.get("status") or "").upper().strip()
-    payload = {"graded": True, "graded_at": now.isoformat(),
+    payload = {"graded": True, "grade_version": GRADE_VERSION,
+               "graded_at": now.isoformat(),
                "margin": margin, "status_at_entry": status or None}
     if true_line is None or entry is None:
         payload["notes"] = "missing true line or entry line — calibration skipped"

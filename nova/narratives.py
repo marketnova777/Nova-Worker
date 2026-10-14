@@ -9,6 +9,15 @@ edge, market. Status taxonomy only.
 """
 
 
+def _side_number(n, vs):
+    """Home-perspective line -> the value side's own number (flip when away)."""
+    try:
+        n = float(n)
+    except (TypeError, ValueError):
+        return n
+    return n if vs == "home" else -n
+
+
 def _team(game, side):
     return (game.get(f"{side}_team") or game.get(f"{side}_team_name")
             or side.upper())
@@ -209,12 +218,13 @@ def build_risk(game, result, ctx):
 def build_buy_to(game, result):
     vs = result.get("_value_side") or "home"
     side_team = _team(game, vs)
-    mp = result.get("minimum_playable")
+    mp = _side_number(result.get("minimum_playable"), vs)
     tl = result.get("true_line")
-    line = result.get("market_line")
+    side_tl = _side_number(tl, vs)
+    line = _side_number(result.get("market_line"), vs)
     return (f"Take {side_team} at {_fmt_line(mp)} or better — inside that "
-            f"number the edge is spent. Nova's fair is {_fmt_line(tl)}; at "
-            f"the current {_fmt_line(line)} the edge is "
+            f"number the edge is spent. Nova's fair for {side_team} is "
+            f"{_fmt_line(side_tl)}; at the current {_fmt_line(line)} the edge is "
             f"{result.get('raw_edge', 0):.1f} pts.")
 
 
@@ -235,10 +245,11 @@ def build_value_window(game, result):
                 else "ungraded")
     except Exception:
         zone = "ungraded"
-    return (f"PLAY: {side_team} {_fmt_line(mp)} or better. "
-            f"LEAN: to {_fmt_line((mp or tl) and (mp + 1.0))}. "
-            f"NUMBER GONE: at {_fmt_line(tl)}. "
-            f"Current market {_fmt_line(line)} sits {zone} "
+    side_mp = _side_number(mp, vs)
+    return (f"PLAY: {side_team} {_fmt_line(side_mp)} or better. "
+            f"LEAN: to {_fmt_line(side_mp + 1.0)}. "
+            f"NUMBER GONE: at {_fmt_line(_side_number(tl, vs))}. "
+            f"Current market {_fmt_line(_side_number(line, vs))} sits {zone} "
             f"({edge:.1f} pts vs fair).")
 
 

@@ -328,6 +328,27 @@ check("juice pressure marker recorded on the value side",
       _r_lean["telemetry"]["juice_pressure"] == "against_value_side")
 check("value side resolved home (favorite at -1 vs true -5)",
       _r_lean["telemetry"]["value_side"] == "home")
+# value-side regression (Oct 14 fix): every game whose market favorite is
+# the AWAY team (positive home-perspective line) had its side flipped.
+# ratings: away stronger -> away is the true favorite
+_pair_aw = {"home": {"rating": 0.0}, "away": {"rating": 3.0}}
+_r_aw = compute_read(_g, _pair_aw, _mk(7.0))   # home +7 vs fair ~+1.1
+check("AWAY-favorite: home +7 vs fair +1.1 -> value is HOME (dog points), not the away favorite",
+      _r_aw["telemetry"]["value_side"] == "home"
+      and _r_aw["edge_direction"] == "NOVA_FAVORS_HOME")
+_r_aw2 = compute_read(_g, _pair_aw, _mk(0.0))  # pickem vs fair +0.5: away underpriced
+check("AWAY-favorite underpriced: pickem vs fair +0.5 -> value is AWAY",
+      _r_aw2["telemetry"]["value_side"] == "away"
+      and _r_aw2["edge_direction"] == "NOVA_FAVORS_AWAY")
+_r_hm = compute_read(_g, _pair, _mk(-1.5))      # home fav laying less than fair -5
+check("HOME-favorite regression: -1.5 vs true -5 -> value home (unchanged)",
+      _r_hm["telemetry"]["value_side"] == "home")
+_r_dog = compute_read(_g, _pair, _mk(-6.5))    # home dog... home fav laying more than fair
+check("home fav laying -6.5 vs true -5 -> value is AWAY",
+      _r_dog["telemetry"]["value_side"] == "away")
+check("buy-to prints the SIDE number (sign flipped for away value)",
+      isinstance(_r_dog.get("invalidators"), list)
+      and "(Bears +7.5 or better)" in _r_dog["invalidators"][0])
 _r_quiet = compute_read(_g, _pair, _mk(-4.5), juice=_ju_against)
 check("quiet PASS upgrades to MONITOR on juice pressure", _r_quiet["status"] == "MONITOR")
 _r_opp = compute_read(_g, _pair, _mk(-4.5),
@@ -490,6 +511,11 @@ _gf = _gr.grade_finals([_g_game], [{**_g_read, "final_read_json": _json.dumps(_g
                        {"g1": _g_odds}, now=_g_now)
 check("grade_finals skips reads already graded",
       len(_gf) == 0)
+_gf_old = _gr.grade_finals([_g_game], [{**_g_read, "id": "r5",
+    "final_read_json": _json.dumps({**_gp, "grade_version": 1})}],
+    {"g1": _g_odds}, now=_g_now)
+check("grade version bump re-grades reads graded under the old derivation",
+      len(_gf_old) == 1 and _gf_old[0][1]["grade_version"] == _gr.GRADE_VERSION)
 _gf2 = _gr.grade_finals([_g_game], [_g_read], {"g1": _g_odds}, now=_g_now)
 check("grade_finals grades an ungraded final read",
       len(_gf2) == 1 and _gf2[0][0] == "r1")

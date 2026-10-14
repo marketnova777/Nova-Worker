@@ -171,9 +171,14 @@ def compute_read(game, ratings_pair, market_rows, juice=None, form=None,
     #     the dog is getting too many points -> "dog"
     direction = "favorite" if line > tp.spread else "dog"
 
-    # Value side (home-perspective: negative line = home favored).
-    value_side = (("home" if line < 0 else "away") if direction == "favorite"
-                  else ("away" if line < 0 else "home"))
+    # Value side: the side whose number beats its fair number. A home
+    # bettor wants the line as HIGH as possible, so home holds value iff
+    # market line > fair; away holds value iff market line < fair. The
+    # previous abbr-based derivation flipped the side in every game
+    # whose market favorite was the AWAY team (positive line), e.g.
+    # market home +7 vs fair +1.1: the home dog is getting 5.9 extra
+    # points — value is HOME, not the away favorite.
+    value_side = "home" if line > tp.spread else "away"
 
     # Juice pressure (game theory layer, Part XX): a juice move AGAINST
     # the value side while the number held is the book probing demand on
@@ -282,7 +287,10 @@ def compute_read(game, ratings_pair, market_rows, juice=None, form=None,
     min_playable = float(getattr(decision, "minimum_playable_price", 0.0) or 0.0)
     side_team = (game.get(f"{value_side}_team") or game.get(f"{value_side}_team_name")
                  or value_side.upper())
-    playable_until = f"{side_team} {min_playable:+.1f} or better"
+    # min_playable is home-perspective; the value side's own number is
+    # negated when the value side is away (away number = -home line)
+    side_mp = min_playable if value_side == "home" else -min_playable
+    playable_until = f"{side_team} {side_mp:+.1f} or better"
     edge_direction = ("NOVA_FAVORS_" + ("HOME" if value_side == "home" else "AWAY"))
     invalidators = [
         f"Spread crosses the buy-to threshold ({playable_until})",
@@ -290,7 +298,7 @@ def compute_read(game, ratings_pair, market_rows, juice=None, form=None,
         "Juice moves against the value side past -130",
         "Personnel or injury news not yet absorbed by the ratings",
     ]
-    next_trigger = f"Re-run when the spread approaches {min_playable:+.1f} on the value side."
+    next_trigger = f"Re-run when the spread approaches {side_mp:+.1f} on the value side."
     # honest data confidence: ratings + odds verified; decays with odds age
     conf = 90
     try:
