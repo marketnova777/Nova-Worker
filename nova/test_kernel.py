@@ -394,6 +394,45 @@ check("no form data -> no streak context, read unaffected",
       compute_read(_g, _pair, _mkv(-1.0, -110))["telemetry"]["streak"] is None)
 
 print()
+print("--- answer pack (nova/answers.py — local, zero-credit) ---")
+from nova import answers as _ans
+from nova import web as _web
+
+_ap_g = {"away_team": "Rams", "home_team": "Bills", "league_code": "NFL"}
+_ap_r = {"status": "PASS", "true_line": -5.0, "market_line": -1.0,
+         "edge_value": 4.0, "thesis": "Nova makes this -5.", 
+         "why_market_here": "Opener lag.", "risk": "Breaks at -3.5.",
+         "buy_to": "Take Buffalo -3 or better.", "next_trigger": "Watch -3.5.",
+         "market_tape": "Open -1.0 → current -1.0.", "true_line_basis": "Ratings.",
+         "regression_notes": None}
+_ap = _ans.build_pack(_ap_g, _ap_r, _ap_r, news=[{"headline": "Bills LT returns"}])
+check("pack carries all six core intents",
+      {"true_line", "should_i_bet", "where_does_value_end", "why_is_the_market_here",
+       "what_breaks_the_thesis", "what_would_change_novas_mind"} <= set(_ap))
+check("pack quotes only payload facts (numbers trace to the read)",
+      "-5.0" in _ap["true_line"] and "-1.0" in _ap["true_line"] and "4.0" in _ap["true_line"])
+check("latest_news labels headlines league-level, never team-specific",
+      "league-level" in _ap["latest_news"] and "Bills LT returns" in _ap["latest_news"])
+check("pack_json wraps in answer_pack envelope",
+      _json.loads(_ans.pack_json(_ap_g, _ap_r, _ap_r, news=[]))["answer_pack"]["should_i_bet"].startswith("Status PASS"))
+_aw = _ans.build_pack(_ap_g, {"status": "AWAITING DATA"}, {})
+check("AWAITING DATA pack says no thesis and names the blocker",
+      _aw["should_i_bet"].startswith("No.") and "AWAITING DATA" in _aw["true_line"])
+check("news omitted entirely when lookup yields nothing (never stale filler)",
+      "latest_news" not in _ans.build_pack(_ap_g, _ap_r, _ap_r, news=[]))
+check("web fetch_url fails honest on 4xx (None, no raise)",
+      _web.fetch_url("https://site.api.espn.com/apis/badpath/zzz") is None)
+check("league_news returns [] for unknown leagues",
+      _web.league_news("not-a-league") == [])
+# json roundtrip guard for changed_fields (api.py canonical compare)
+from nova.api import changed_fields as _cf
+check("changed_fields ignores json string-vs-object roundtrip",
+      _cf({"thesis_json": _json.dumps({"a": 1})}, {"thesis_json": {"a": 1}}, ["thesis_json"]) is None)
+check("changed_fields still catches a real answer-pack change",
+      _cf({"thesis_json": {"a": 1}}, {"thesis_json": {"a": 2}}, ["thesis_json"]) == {"thesis_json": {"a": 2}})
+
+
+print()
 print("=" * 78)
 print(f"RESULT: {PASS} passed, {FAIL} failed")
 print("=" * 78)

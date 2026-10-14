@@ -16,7 +16,7 @@ from datetime import datetime, timedelta, timezone
 import json
 import sys
 
-from nova import config, espn, odds, reads, llm, enrich, props
+from nova import config, espn, odds, reads, llm, enrich, props, web, answers
 from nova.api import Base44Client, changed_fields
 
 
@@ -206,6 +206,7 @@ def run(dry=None):
         seen_read_games.add(gid)
         current_reads[gid] = r
     read_patches = []
+    news_by_league = {}  # one online lookup per league per cycle (nova/web)
     for g in games:
         try:
             start = datetime.fromisoformat(str(g.get("start_time", "")).replace("Z", "+00:00"))
@@ -233,6 +234,8 @@ def run(dry=None):
                 "away_team_abbr": rec_ab.get("away_abbr")}))
         markets = reads.freshest_market(rows)
         league_l = str(g.get("league_code") or g.get("sport") or "").lower()
+        if league_l not in news_by_league:
+            news_by_league[league_l] = web.league_news(league_l)
         if league_l not in rest_maps:
             rest_maps[league_l] = enrich.rest_map(games, league_l)
         rmap = rest_maps[league_l]
@@ -299,6 +302,10 @@ def run(dry=None):
             "regression_support": result.get("regression_support"),
             "lineup_status": result.get("lineup_status"),
             "why_market_here": result.get("why_market_here"),
+            # worker-written answer pack (Python-generated answers;
+            # novaChat renders these — zero Base44 AI credits)
+            "thesis_json": answers.pack_json(g, result, result,
+                                              news_by_league.get(league_l)),
             "thesis": result.get("thesis"),
             "nova_read": result.get("nova_read"),
             "risk": result.get("risk"),
@@ -347,7 +354,7 @@ def run(dry=None):
                 "minimum_playable_price", "playable_until",
                 "key_number_quality", "line_movement_direction", "sharp_resistance", "public_bias",
                 "game_state_support", "regression_support", "weather", "lineup_status",
-                "why_market_here", "thesis", "nova_read", "risk", "buy_to",
+                "why_market_here", "thesis", "nova_read", "risk", "buy_to", "thesis_json",
                 "regression_notes", "market_tape", "true_line_basis",
                 "value_window", "confidence"])
             if patch:
@@ -409,6 +416,8 @@ def run(dry=None):
                 "data_confidence": result.get("data_confidence"),
                 "what_the_book_is_doing": doing,
                 "one_line_read": one_line,
+                "thesis_json": answers.pack_json(payload, result, result,
+                                                  web.league_news(lg_code.lower())),
             }))
     log("read", f"{len(read_patches)} reads to write")
 

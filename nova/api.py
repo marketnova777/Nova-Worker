@@ -166,5 +166,16 @@ def changed_fields(current, desired, tracked):
                 continue
         elif old == new:
             continue
+        elif f.endswith("_json") and (isinstance(old, dict) or isinstance(new, dict)):
+            # Base44 roundtrips JSON strings as parsed objects — compare
+            # canonically so a pack written as text vs read back as an
+            # object never looks like a change (no phantom write churn)
+            try:
+                a = json.loads(old) if isinstance(old, str) else old
+                b = json.loads(new) if isinstance(new, str) else new
+                if json.dumps(a, sort_keys=True) == json.dumps(b, sort_keys=True):
+                    continue
+            except Exception:
+                pass
         patch[f] = new
     return patch or None
