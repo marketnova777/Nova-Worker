@@ -219,7 +219,10 @@ def run(dry=None):
             continue
         pair = reads.resolve_ratings(g, ratings)
         if not pair:
-            continue
+            # Honest silence is not a blank card: a game with a live market
+            # but no power ratings publishes an AWAITING DATA read (compute_read
+            # returns the stub) — the board says what it's missing, never nothing.
+            pair = {}
         # backfill missing team abbrs from the ESPN event (the page's
         # injury module matches on team_abbr vs game abbr fields)
         rec_ab = venue_by_espn.get(g.get("provider_game_id"))
@@ -373,7 +376,7 @@ def run(dry=None):
                 continue
             pair = reads.resolve_ratings(payload, ratings)
             if not pair:
-                continue
+                pair = {}   # no ratings yet -> AWAITING DATA stub, not a skip
             result = reads.compute_read(payload, pair, markets,
                                         form=reads.resolve_form(payload, forms))
             doing, one_line = reads.template_narrative(result, payload)
