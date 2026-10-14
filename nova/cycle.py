@@ -232,6 +232,15 @@ def run(dry=None):
             game_updates.append((g, {
                 "home_team_abbr": rec_ab.get("home_abbr"),
                 "away_team_abbr": rec_ab.get("away_abbr")}))
+        # self-heal: the board buckets on game_date (ET convention) — a
+        # game missing it is invisible on the board, so fill it on sight
+        if not g.get("game_date") and g.get("start_time"):
+            try:
+                _st = datetime.fromisoformat(str(g.get("start_time")).replace("Z", "+00:00"))
+                game_updates.append((g, {"game_date":
+                    _st.astimezone(ZoneInfo("America/New_York")).strftime("%Y-%m-%d")}))
+            except ValueError:
+                pass
         markets = reads.freshest_market(rows)
         league_l = str(g.get("league_code") or g.get("sport") or "").lower()
         if league_l not in news_by_league:

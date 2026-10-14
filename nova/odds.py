@@ -194,12 +194,23 @@ def plan(games, existing_odds, desired_rows, league):
         seen_event_ids.add(eid)
         g = find_game(virtual, row, league)
         if g is None:
+            try:
+                from datetime import datetime as _dt
+                from zoneinfo import ZoneInfo as _ZI
+                _st = _dt.fromisoformat(str(row["commence_time"]).replace("Z", "+00:00"))
+                _gd = _st.astimezone(_ZI("America/New_York")).strftime("%Y-%m-%d")
+            except Exception:
+                _gd = None
             payload = {
                 "league_code": league.upper(),
                 "sport": league.upper(),
                 "home_team": row["home_team"],
                 "away_team": row["away_team"],
                 "start_time": row["commence_time"],
+                # legacy board-bucket field — the board filters on game_date;
+                # null hides worker-created games (US/Eastern convention,
+                # verified against 509/512 legacy rows Oct 2026)
+                "game_date": _gd,
                 "status": "scheduled",
                 "__create": len(game_creates),
             }
