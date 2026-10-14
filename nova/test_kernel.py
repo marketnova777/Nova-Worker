@@ -555,6 +555,133 @@ check("changed_fields still catches a real answer-pack change",
       _cf({"thesis_json": {"a": 1}}, {"thesis_json": {"a": 2}}, ["thesis_json"]) == {"thesis_json": {"a": 2}})
 
 
+
+
+# ===========================================================================
+# LIVE RESEARCH LAYER (nova/research.py)
+# ===========================================================================
+from nova import research as _res
+from nova import answers
+
+# MODE ROUTER — canonical-state questions never search; world questions do
+check("router: fair-line question is deterministic (MODE 0)",
+      _res.classify("What is Nova's fair line for the Rangers game?") == 0)
+check("router: buy-to question is deterministic (MODE 0)",
+      _res.classify("What is the buy-to on Bills -3.5?") == 0)
+check("router: taxonomy question is deterministic (MODE 0)",
+      _res.classify("Explain NUMBER GONE to me") == 0)
+check("router: update request requires research (MODE 2)",
+      _res.classify("Update Rangers Capitals") == 2)
+check("router: goalie confirmation requires research (MODE 2)",
+      _res.classify("Is the goalie confirmed tonight?") == 2)
+check("router: injury news requires research (MODE 2)",
+      _res.classify("Any injury news for this matchup?") == 2)
+
+# PROMPT CONTRACT — engine boundaries are stated inside the prompt
+_p = _res.build_prompt(
+    {"away_team": "Oilers", "home_team": "Sharks", "league_code": "nhl",
+     "start_time": "2026-10-15T02:00:00Z", "venue": "SAP Center"},
+    {"status": "LEAN", "marketnova_true_line": -1.5, "market_line": -1.5,
+     "edge_value": 0.9, "one_line_read": "shading case"})
+check("research prompt carries event, league, and canonical snapshot",
+      all(s in _p for s in ("Oilers", "Sharks", "NHL", "LEAN", "-1.5")))
+check("research prompt forbids price-engine answers",
+      "Do not create a betting recommendation" in _p
+      and "Do not create a true line" in _p
+      and "sharp money" in _p)
+check("research prompt requires the JSON contract",
+      "material_changes" in _p and "reanalysis_required" in _p
+      and "confirmed_facts" in _p)
+
+# OUTPUT PARSING + SOURCE DISCIPLINE
+_good = """```json
+{
+  "material_changes": [{"claim": "Skinner confirmed starting goalie",
+    "source": "NHL.com", "url": "https://www.nhl.com/oilers/news",
+    "verification": "confirmed"}],
+  "confirmed_facts": [{"claim": "No new injuries", "source": "NHL.com",
+    "url": "https://www.nhl.com/oilers/injuries"}],
+  "uncertain_items": [],
+  "reanalysis_required": true
+}
+```"""
+_f = _res.parse_research(_good, [], "2026-10-14T23:00:00Z")
+check("parse: valid research JSON normalizes with source discipline",
+      _f is not None and _f["material_changes"][0]["retrieved_at"] == "2026-10-14T23:00:00Z"
+      and _f["material_changes"][0]["verification"] == "confirmed")
+check("parse: malformed research output fails honestly",
+      _res.parse_research("no json here at all", [], "t") is None)
+_no_url = _res.parse_research(
+    '{"material_changes": [{"claim": "goalie changed", "source": "twitter"}]}',
+    [], "2026-10-14T23:00:00Z")
+check("parse: claim without URL is never confirmed",
+      _no_url is not None and _no_url["material_changes"][0]["verification"] == "unverified")
+check("source hierarchy: official league domain is tier 1",
+      _res.source_quality("https://www.nhl.com/oilers/news") == 1)
+check("source hierarchy: random blog is tier 5",
+      _res.source_quality("https://someblog.blogspot.com/post") == 5)
+check("pack intent: no findings -> no_material_change summary",
+      _res.pack_intent({"material_changes": [], "reanalysis_required": False},
+                       "t", "gpt-5.5")["no_material_change"] is True)
+check("pack intent: material change carries claim + url + retrieved_at",
+      _res.pack_intent({"material_changes": [_f["material_changes"][0]],
+                        "reanalysis_required": True}, "t", "gpt-5.5")
+      ["material_changes"][0]["url"].startswith("https://www.nhl.com"))
+
+# TTL + CANDIDATE SELECTION (cost control)
+def _mkgame(gid, hours, status="scheduled"):
+    import datetime as _dt
+    st = (_dt.datetime.now(_dt.timezone.utc)
+          + _dt.timedelta(hours=hours)).isoformat()
+    return {"id": gid, "status": status, "start_time": st,
+            "away_team": "A", "home_team": "B"}
+_now = datetime.now(timezone.utc)
+_fresh = {"thesis_json": _json.dumps({"answer_pack": {"live_research":
+    {"researched_at": _now.isoformat()}}})}
+_stale = {"thesis_json": _json.dumps({"answer_pack": {"live_research":
+    {"researched_at": (_now - timedelta(hours=20)).isoformat()}}})}
+check("ttl: fresh research (same hour) is not stale",
+      not _res.is_stale(_mkgame("g1", 30), _fresh))
+check("ttl: 20h-old research is stale for a near game",
+      _res.is_stale(_mkgame("g1", 3), _stale))
+_age8 = {"thesis_json": _json.dumps({"answer_pack": {"live_research":
+    {"researched_at": (_now - timedelta(hours=8)).isoformat()}}})}
+check("ttl: far-out games get a long budget (8h age still fresh)",
+      not _res.is_stale(_mkgame("g1", 40), _age8))
+check("ttl: 20h-old research is stale even for far-out games",
+      _res.is_stale(_mkgame("g1", 40), _stale))
+_cands = _res.pick_candidates(
+    [_mkgame("a", 3), _mkgame("b", 20), _mkgame("c", 40),
+     _mkgame("d", 3, status="final"), _mkgame("e", 100)],
+    {"a": _stale, "b": _stale, "c": _stale, "d": _stale, "e": _stale},
+    cap=2)
+check("candidates: scheduled in-window stale games, soonest first, capped",
+      [g["id"] for g, _r in _cands] == ["a", "b"])
+
+# FAIL-OPEN: no key -> research disabled, never crashes the cycle
+check("fail-open: no OPENAI_API_KEY disables MODE 2",
+      not _res.enabled() and _res.run_research([], {}, log=lambda *a: None) == {})
+
+# ANSWER PACK: research rides thesis_json as the structured live_research intent
+_pack = answers.build_pack(
+    {"away_team": "Oilers", "home_team": "Sharks", "league_code": "NHL",
+     "game_date": "2026-10-15", "start_time": "2026-10-15T02:00:00Z"},
+    {"status": "LEAN", "true_line": -1.5, "market_line": -1.5,
+     "edge_value": 0.9, "buy_to": "EDM -1.1 or better", "risk": "goalie change"},
+    {"doing": "x", "one_line": "y"},
+    research={"research_version": 1, "researched_at": "t", "model": "gpt-5.5",
+              "summary": "No material change.", "no_material_change": True,
+              "reanalysis_required": False, "material_changes": [],
+              "confirmed_facts": [], "uncertain_items": [], "sources": []})
+check("answer pack carries structured live_research intent",
+      isinstance(_pack, dict) and _pack["live_research"]["no_material_change"] is True)
+check("answer pack omits live_research when research is None",
+      "live_research" not in answers.build_pack(
+          {"away_team": "A", "home_team": "B", "league_code": "NHL"},
+          {"status": "PASS", "true_line": 1.0, "market_line": 1.0,
+           "edge_value": 0.0}, {"doing": "x", "one_line": "y"}))
+
+
 print()
 print("=" * 78)
 print(f"RESULT: {PASS} passed, {FAIL} failed")

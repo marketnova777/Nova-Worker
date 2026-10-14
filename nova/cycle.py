@@ -17,7 +17,7 @@ from zoneinfo import ZoneInfo
 import json
 import sys
 
-from nova import config, espn, odds, reads, llm, enrich, props, web, answers, grades, janitor
+from nova import config, espn, odds, reads, llm, enrich, props, web, answers, grades, janitor, research
 from nova.api import Base44Client, changed_fields
 
 
@@ -56,7 +56,7 @@ def run(dry=None):
     forms = client.list_all("TeamForm")
     existing_reads = client.list_all("MarketNovaRead", fields=[
         "id", "game_id", "market_type", "is_current", "status",
-        "marketnova_true_line", "raw_edge", "what_the_book_is_doing", "one_line_read",
+        "marketnova_true_line", "raw_edge", "what_the_book_is_doing", "one_line_read", "thesis_json",
         "true_line_value", "market_line", "edge_direction", "final_read_json"])
     existing_weather = client.list_all("WeatherSnapshot", fields=["id", "game_id", "created_date"])
     existing_travel = client.list_all("TravelContext", fields=["id", "game_id", "team_abbr", "days_rest"])
@@ -245,6 +245,17 @@ def run(dry=None):
             continue
         seen_read_games.add(gid)
         current_reads[gid] = r
+
+    # ---------- live research (MODE 2; OpenAI web_search, optional) ------
+    # Runs BEFORE read building so findings ride this cycle's answer packs.
+    # Research never touches lines/edges: it informs context only.
+    research_by_game = {}
+    try:
+        research_by_game = research.run_research(
+            games, current_reads, log=lambda m: log("research", m))
+    except Exception as e:
+        log("research", f"research pass failed (non-fatal): {e}")
+
     read_patches = []
     news_by_league = {}  # one online lookup per league per cycle (nova/web)
     for g in games:
@@ -355,7 +366,8 @@ def run(dry=None):
             # novaChat renders these — zero Base44 AI credits)
             "thesis_json": answers.pack_json(g, result, result,
                                               news_by_league.get(league_l),
-                                              context=_pack_ctx(g)),
+                                              context=_pack_ctx(g),
+                                              research=research_by_game.get(g.get("id"))),
             "thesis": result.get("thesis"),
             "nova_read": result.get("nova_read"),
             "risk": result.get("risk"),

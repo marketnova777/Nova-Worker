@@ -21,6 +21,22 @@ ODDS_API_BASE = "https://api.the-odds-api.com/v4"
 LLM_API_KEY = os.environ.get("LLM_API_KEY", "")  # Anthropic-style key
 LLM_MODEL = os.environ.get("LLM_MODEL", "claude-haiku-4-5")
 
+
+# OpenAI live research layer (Responses API + web_search) — optional;
+# if absent, MODE 2 is disabled and reads stay deterministic/cached.
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-5.5")
+OPENAI_MODEL_FALLBACK = os.environ.get("OPENAI_MODEL_FALLBACK", "gpt-6-astra")
+RESEARCH_DISABLED = os.environ.get("NOVA_RESEARCH", "") == "0"
+RESEARCH_CONTEXT_SIZE = os.environ.get("NOVA_RESEARCH_CONTEXT", "high")
+RESEARCH_MAX_GAMES = int(os.environ.get("NOVA_RESEARCH_MAX_GAMES", "6"))
+RESEARCH_WINDOW_H = float(os.environ.get("NOVA_RESEARCH_WINDOW_H", "48"))
+RESEARCH_TIMEOUT_S = int(os.environ.get("NOVA_RESEARCH_TIMEOUT_S", "180"))
+# freshness budget by proximity to start (hours)
+RESEARCH_TTL_NEAR = float(os.environ.get("NOVA_RESEARCH_TTL_NEAR", "2"))   # <4h to game
+RESEARCH_TTL_MID = float(os.environ.get("NOVA_RESEARCH_TTL_MID", "6"))    # 4-24h
+RESEARCH_TTL_FAR = float(os.environ.get("NOVA_RESEARCH_TTL_FAR", "12"))   # >24h
+
 # Cycle behavior
 LEAGUES = [l.strip().lower() for l in os.environ.get(
     "NOVA_LEAGUES", "nfl,ncaaf,nhl,nba,ncaab,wnba,mlb").split(",") if l.strip()]

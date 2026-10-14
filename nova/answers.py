@@ -41,7 +41,7 @@ def _team(game, side):
             or side.upper())
 
 
-def build_pack(game, result, narrative, news=None, context=None):
+def build_pack(game, result, narrative, news=None, context=None, research=None):
     """Return the answer-pack dict for one read, or None if nothing
     useful can be said (all fields missing). AWAITING DATA gets honest
     per-intent answers, not generic filler."""
@@ -140,12 +140,18 @@ def build_pack(game, result, narrative, news=None, context=None):
                          "signal on its own.")
             pack["team_context"] = "\n".join(lines)
 
+    # ---- live research: MODE 2 web findings (OpenAI web_search).
+    # research is None when the layer is disabled or the game was not a
+    # target this cycle — omit the intent entirely (never print filler).
+    if research is not None:
+        pack["live_research"] = research
+
     return pack or None
 
 
-def pack_json(game, result, narrative, news=None, context=None):
+def pack_json(game, result, narrative, news=None, context=None, research=None):
     """Serialized answer pack for MarketNovaRead.thesis_json, or None."""
-    pack = build_pack(game, result, narrative, news, context)
+    pack = build_pack(game, result, narrative, news, context, research)
     if not pack:
         return None
     try:
