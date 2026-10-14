@@ -17,7 +17,7 @@ from zoneinfo import ZoneInfo
 import json
 import sys
 
-from nova import config, espn, odds, reads, llm, enrich, props, web, answers, grades
+from nova import config, espn, odds, reads, llm, enrich, props, web, answers, grades, janitor
 from nova.api import Base44Client, changed_fields
 
 
@@ -628,6 +628,29 @@ def run(dry=None):
     log("props", f"{len(prop_payloads)} payloads | new {n_new_p}, upd {n_upd_p}"
         + ("" if prop_entity_ok else " — STAGED, entity missing"))
     log("done", f"cycle complete: {client.writes} writes, {client.reads} bulk reads")
+
+    # ---------- identity janitor: sweep legacy dup game copies ----------
+    # (the app-side legacy ESPN sync still creates v14-schema duplicates;
+    #  unattached copies are deleted, attached ones are logged for merge)
+    try:
+        odds_ids = set(odds_by_game.keys())
+        # a fresh odds view when the league loop never loaded one
+        candidates = [g for g in games
+                      if not g.get("provider_game_id") and g.get("external_id")]
+        if candidates and not odds_ids:
+            odds_ids = set(o.get("game_id") for o in client.list_all(
+                "OddsSnapshot", fields=["id", "game_id"]))
+        # refresh games: the plan may have linked/created games this cycle
+        fresh_games = client.list_all("Game", fields=[
+            "id", "provider_game_id", "external_id", "home_team",
+            "away_team", "game_date", "status", "created_date"])
+        n_del, n_man = janitor.sweep(client, fresh_games, existing_reads,
+                                     odds_ids, log=lambda m: log("janitor", m))
+        if n_del or n_man:
+            log("janitor", f"swept {n_del} duplicate games "
+                  f"({n_man} attached dups left for manual merge)")
+    except Exception as e:
+        log("janitor", f"sweep failed (non-fatal): {e}")
 
 
 def write_plan(client, league_plans, game_updates, read_patches, stale_read_ids=()):

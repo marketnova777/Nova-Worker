@@ -498,6 +498,29 @@ check("calibration_summary aggregates model-closer record and CLV",
       _cs["graded"] == 2 and _cs["model_closer"] == 1 and _cs["market_closer"] == 1
       and _cs["value_record"] == {"LOST": 2})
 
+# ---- identity janitor (nova/janitor.py) ----
+from nova import janitor as _jan
+_j_games = [
+    {"id": "canon", "provider_game_id": "4019", "external_id": "odds-9"},
+    {"id": "junk1", "provider_game_id": None, "external_id": "4019"},   # dup, no attachments
+    {"id": "junk2", "provider_game_id": None, "external_id": "4019"},   # dup, has read
+    {"id": "unique", "provider_game_id": None, "external_id": "4020"}, # no canonical -> keep
+    {"id": "canon2", "provider_game_id": "4021", "external_id": None},
+]
+_safe, _manual = _jan.find_junk(_j_games, {"junk2"}, set())
+check("janitor separates unattached dups from attached dups",
+      [g["id"] for g in _safe] == ["junk1"] and [g["id"] for g in _manual] == ["junk2"])
+# legacy legit games (no canonical collision) are never touched
+check("janitor keeps non-duplicate legacy games",
+      all(g["id"] not in ("unique", "canon2") for g in _safe + _manual))
+class _JanClient:
+    def __init__(self): self.deleted = []
+    def delete(self, entity, rid): self.deleted.append((entity, rid))
+_jc = _JanClient()
+_n_del, _n_man = _jan.sweep(_jc, _j_games, [{"game_id": "junk2"}], set(), log=lambda *a: None)
+check("janitor sweep deletes only the safe dup",
+      _n_del == 1 and _jc.deleted == [("Game", "junk1")] and _n_man == 1)
+
 # json roundtrip guard for changed_fields (api.py canonical compare)
 from nova.api import changed_fields as _cf
 check("changed_fields ignores json string-vs-object roundtrip",
