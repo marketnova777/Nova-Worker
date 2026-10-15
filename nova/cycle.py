@@ -17,7 +17,7 @@ from zoneinfo import ZoneInfo
 import json
 import sys
 
-from nova import config, espn, odds, reads, llm, enrich, props, web, answers, grades, janitor, research
+from nova import config, espn, odds, reads, llm, enrich, props, web, answers, grades, janitor, research, synthesis
 from nova.api import Base44Client, changed_fields
 
 
@@ -42,6 +42,25 @@ def _injury_details(game, injuries):
                 out[side].append(i)
     return out
 
+
+
+def _prior_pack_field(read, field):
+    """Pull a structured intent off a prior read's thesis_json answer pack
+    (handles the Base44 string-vs-object roundtrip)."""
+    if not read:
+        return None
+    pack = read.get("thesis_json")
+    if isinstance(pack, str):
+        try:
+            pack = json.loads(pack)
+        except (ValueError, TypeError):
+            return None
+    if not isinstance(pack, dict):
+        return None
+    ap = pack.get("answer_pack")
+    if isinstance(ap, dict) and ap.get(field) is not None:
+        return ap[field]
+    return None
 
 def run(dry=None):
     dry = dry if dry is not None else config.DRY_RUN
@@ -256,6 +275,24 @@ def run(dry=None):
     except Exception as e:
         log("research", f"research pass failed (non-fatal): {e}")
 
+    # ---------- MODE 2 synthesis (fixture rollout; verified before slate)
+    # One deep-analysis game per cycle in fixture mode. The synthesis
+    # produces a structured Analysis Pack + validated fair range that
+    # becomes an INPUT to the canonical read — the kernel still owns all
+    # downstream math and the state machine. Fail-open everywhere.
+    fixture_games = []
+    try:
+        if not synthesis.synth_enabled():
+            log("synth", "MODE 2 synthesis disabled (no OPENAI_API_KEY) — "
+                         "reads stay on the ratings baseline")
+        if synthesis.synth_enabled():
+            fixture_games = synthesis.select_fixture(games, current_reads) or []
+            for _fg, _fr in fixture_games:
+                log("synth", f"fixture: {_fg.get('away_team')}@{_fg.get('home_team')}")
+    except Exception as e:
+        log("synth", f"fixture selection failed (non-fatal): {e}")
+    fixture_ids = {g.get("id") for g, _r in fixture_games}
+
     read_patches = []
     news_by_league = {}  # one online lookup per league per cycle (nova/web)
     for g in games:
@@ -322,6 +359,58 @@ def run(dry=None):
                                     weather=weather_by_game.get(g["id"]),
                                     rest=rest_ctx, injuries=n_inj,
                                     tape=tape, injury_details=inj_details)
+        # ---- MODE 2 deep synthesis for fixture games only ----
+        if g.get("id") in fixture_ids and result.get("status") != "AWAITING DATA":
+            try:
+                _research_in = (research_by_game.get(g.get("id"))
+                                or _prior_pack_field(current_reads.get(g.get("id")),
+                                                     "live_research"))
+                _ctx = synthesis.build_context(
+                    g, result.get("true_line"),
+                    (markets.get("spread") or {}).get("market_line"),
+                    tape=tape, injuries=n_inj, injury_details=inj_details,
+                    weather=weather_by_game.get(g["id"]), rest=rest_ctx,
+                    form=reads.resolve_form(g, forms),
+                    movement=enrich.movement_context(rows), league=league_l,
+                    research=_research_in)
+                _mid, _pack, _notes = synthesis.synthesize(
+                    g, result.get("true_line"), _ctx,
+                    log=lambda m: log("synth", m))
+                for _n in _notes:
+                    log("synth", f"{g.get('away_team')}@{g.get('home_team')}: {_n}")
+                if _mid is not None and _pack:
+                    result = reads.compute_read(
+                        g, pair, markets,
+                        juice=juice_by_game.get(g["id"]),
+                        form=reads.resolve_form(g, forms),
+                        movement=enrich.movement_context(rows),
+                        weather=weather_by_game.get(g["id"]),
+                        rest=rest_ctx, injuries=n_inj,
+                        tape=tape, injury_details=inj_details,
+                        synth={"mid": _mid, "pack": _pack})
+                    _pack["status_at_write"] = result.get("status")
+                    _pack["fair_range"] = _pack.get("nova_fair_range")
+                    # UPDATE contract vs the prior canonical pack
+                    _old_ap = _prior_pack_field(current_reads.get(g.get("id")),
+                                                "analysis_pack")
+                    if _old_ap:
+                        _diff = synthesis.compare_packs(_old_ap, _pack)
+                        if _diff:
+                            _pack["update_diff"] = _diff
+                    result["analysis_pack"] = _pack
+                    # synthesized narrative fields override templates —
+                    # mechanics-level thesis per founder doctrine section 50
+                    if _pack.get("fair_price_reasoning"):
+                        result["thesis"] = " ".join(
+                            str(x) for x in _pack["fair_price_reasoning"][:4])
+                    if _pack.get("primary_risk"):
+                        result["risk"] = str(_pack["primary_risk"])
+                    if _pack.get("invalidators"):
+                        result["invalidators"] = _pack["invalidators"]
+                    if _pack.get("sportsbook_context"):
+                        result["why_market_here"] = str(_pack["sportsbook_context"])
+            except Exception as e:
+                log("synth", f"synthesis failed (non-fatal, baseline stands): {e}")
         doing, one_line = reads.template_narrative(result, g)
         if current_reads.get(g["id"]) is None:  # new reads only — write budget
             richer = llm.narrate(g, result)

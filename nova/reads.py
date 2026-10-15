@@ -122,7 +122,7 @@ def freshest_market(odds_rows):
 
 def compute_read(game, ratings_pair, market_rows, juice=None, form=None,
                     movement=None, weather=None, rest=None, injuries=None,
-                    tape=None, injury_details=None):
+                    tape=None, injury_details=None, synth=None):
     """Return a decision dict or an AWAITING DATA stub with a reason."""
     league_l = str(game.get("league_code") or game.get("sport") or "").lower()
     league_u = league_l.upper()
@@ -148,6 +148,31 @@ def compute_read(game, ratings_pair, market_rows, juice=None, form=None,
         team_power_gap=gap,
         expected_pace_points=expected_total,
         home_field=HOME_FIELD.get(league_l, 2.0))
+
+    # MODE 2 synthesis input (nova/synthesis.py): a validated fair range
+    # from the deep-analysis layer replaces the ratings baseline for THIS
+    # one input — every downstream rule (signed-edge gate, vig, key
+    # numbers, thresholds, status, buy-to) still runs in the kernel on
+    # the synthesized line. Sanity: |mid - baseline| <= SYNTH_SANITY_MAX.
+    synth_note = None
+    if synth and synth.get("mid") is not None:
+        try:
+            drift = abs(float(synth["mid"]) - float(tp.spread))
+            if drift <= config.SYNTH_SANITY_MAX:
+                tp = kernel.TruePrice(
+                    spread=round(float(synth["mid"]), 2), total=tp.total,
+                    projected_home=round(tp.total / 2 - float(synth["mid"]) / 2, 2),
+                    projected_away=round(tp.total / 2 + float(synth["mid"]) / 2, 2))
+                synth_note = (f"MODE2 synthesis range {synth['pack']['nova_fair_range']['low']} "
+                             f"to {synth['pack']['nova_fair_range']['high']} accepted "
+                             f"(drift {drift:.1f} from ratings baseline); "
+                             "kernel rules applied downstream.")
+            else:
+                synth_note = (f"MODE2 synthesis mid {float(synth['mid']):+.1f} rejected — "
+                             f"drift {drift:.1f} exceeds sanity {config.SYNTH_SANITY_MAX}; "
+                             "ratings baseline stands.")
+        except (TypeError, ValueError, KeyError) as e:
+            synth_note = f"MODE2 synthesis input malformed ({e}); baseline stands."
 
     # SIGNED-EDGE SANITY GATE (runs before the kernel). |abs(market)| -
     # |abs(true)| edge math collapses sign flips: a market of -6.5 vs a true
@@ -460,6 +485,7 @@ def compute_read(game, ratings_pair, market_rows, juice=None, form=None,
             # close) — early favorite-side edges are the documented case
             "streak": streak_ctx,               # momentum context only — never conviction
             "recency_anchor": recency_anchor,   # blowout in the last game: bettors anchor, market prices it
+            "synthesis": synth_note,            # MODE 2 provenance: accepted/rejected + why
         },
     }
 

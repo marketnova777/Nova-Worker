@@ -140,6 +140,22 @@ def build_pack(game, result, narrative, news=None, context=None, research=None):
                          "signal on its own.")
             pack["team_context"] = "\n".join(lines)
 
+    # ---- MODE 2 analysis pack: the deep-synthesis object the read
+    # consumed. Structured (never flattened) so every surface renders the
+    # same canonical intelligence. update_diff carries the UPDATE
+    # contract (what changed / old-new fair / old-new status / why).
+    ap = result.get("analysis_pack")
+    if ap is not None:
+        pack["analysis_pack"] = ap
+        if ap.get("update_diff"):
+            try:
+                from nova.synthesis import render_update
+                txt = render_update(ap["update_diff"])
+                if txt:
+                    pack["update"] = txt
+            except Exception:
+                pass
+
     # ---- live research: MODE 2 web findings (OpenAI web_search).
     # research is None when the layer is disabled or the game was not a
     # target this cycle — omit the intent entirely (never print filler).

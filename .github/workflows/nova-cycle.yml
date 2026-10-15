@@ -40,4 +40,5 @@ jobs:
           LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
+          NOVA_SYNTH_MODE: ${{ vars.NOVA_SYNTH_MODE }}
         run: python run_cycle.py

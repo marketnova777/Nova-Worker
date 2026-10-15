@@ -682,6 +682,143 @@ check("answer pack omits live_research when research is None",
            "edge_value": 0.0}, {"doing": "x", "one_line": "y"}))
 
 
+
+
+# ===========================================================================
+# MODE 2 SYNTHESIS LAYER (nova/synthesis.py)
+# ===========================================================================
+from nova import synthesis as _syn
+from nova import reads
+
+_G = {"id": "gX", "provider_game_id": "40123", "away_team": "Oilers",
+      "home_team": "Sharks", "league_code": "nhl", "status": "scheduled",
+      "start_time": (datetime.now(timezone.utc) + timedelta(hours=3)).isoformat(),
+      "venue": "SAP Center"}
+
+# SPORT BRAIN ROUTING
+check("synth: NHL routes to core doctrine (no dedicated brain yet)",
+      _syn.sport_brain_spec("nhl") == "CORE_BRAIN+FASTESTPAYOUT_DOCTRINE")
+check("synth: NFL routes to the NFL brain",
+      "NFL_BRAIN" in _syn.sport_brain_spec("nfl"))
+check("synth: MLB routes to MLB + F5 brains",
+      "MLB_BRAIN" in _syn.sport_brain_spec("mlb")
+      and "F5_BRAIN" in _syn.sport_brain_spec("mlb"))
+
+# PROMPT CONTRACT
+_ctx = _syn.build_context(_G, baseline=-1.5, market_line=-1.5,
+                         tape=[("t", -1.5, -110)], injuries=2,
+                         research={"material_changes": [
+                             {"claim": "Skinner starting", "source": "NHL.com",
+                              "url": "https://nhl.com/x", "verification": "confirmed",
+                              "retrieved_at": "t"}]})
+_pr = _syn.build_prompt(_G, _ctx)
+check("synth prompt carries doctrine + sport questions + event",
+      all(s in _pr for s in ("CORE_BRAIN", "FASTESTPAYOUT_DOCTRINE",
+                             "Oilers", "Sharks", "confirmed goalie",
+                             "5v5 expected goals")))
+check("synth prompt enforces fair-range-not-precision + no-recommendation rules",
+      "Fair range, not fake precision" in _pr
+      and "Do NOT copy the market" in _pr
+      and "no betting recommendation" in _pr.replace("Do not produce a betting recommendation", "no betting recommendation"))
+check("synth prompt carries the output contract + FastestPayout questions",
+      all(k in _pr for k in ("nova_fair_range", "fair_price_reasoning",
+                             "best_expression", "invalidators",
+                             "Has the market already corrected?")))
+check("synth prompt carries sourced research findings with provenance",
+      "Skinner starting" in _pr and "NHL.com" in _pr and "CONFIRMED" in _pr)
+check("synth prompt carries the kernel baseline and market line",
+      '"kernel_baseline_true_line": -1.5' in _pr)
+
+# PARSE + VALIDATE
+_good_pack = """```json
+{"research_version": "2", "market_snapshot": {"open": -1.5, "current": -2.0, "movement": "drift to home"},
+ "game_reality": {"goalies": "Skinner vs Askarov"},
+ "regression": {"structural": ["5v5 xG edge home"], "noisy": ["3-game win streak"]},
+ "bettor_story": "home streak", "sportsbook_context": "streak priced",
+ "nova_fair_range": {"low": -2.5, "high": -1.5},
+ "fair_price_reasoning": ["5v5 xG edge", "goalie edge confirmed"],
+ "best_expression": "home ML", "buy_to": "-1.5 or better", "primary_risk": "goalie scratch",
+ "invalidators": ["goalie change"], "data_quality": "good", "action_candidate": "LEAN",
+ "sources": [{"claim": "Skinner starting", "source": "NHL.com", "url": "https://nhl.com/x"}]}
+```"""
+_pk = _syn.parse_pack(_good_pack)
+check("synth parse: valid pack shapes with fair range",
+      _pk is not None and _pk["nova_fair_range"] == {"low": -2.5, "high": -1.5})
+check("synth parse: malformed pack fails honestly",
+      _syn.parse_pack("The home team is good.") is None)
+check("synth validate: in-range synthesis accepted",
+      _syn.validate_range({"nova_fair_range": {"low": -2.5, "high": -1.5}}, -1.5)[0] == -2.0)
+_mid, _notes = _syn.validate_range({"nova_fair_range": {"low": -8.0, "high": -7.0}}, -1.5)
+check("synth validate: drift beyond sanity bound is rejected",
+      _mid is None and any("sanity" in n for n in _notes))
+_mid2, _notes2 = _syn.validate_range({"nova_fair_range": {"low": -14.0, "high": 2.0}}, -1.5)
+check("synth validate: too-wide range rejected as unpriceable",
+      _mid2 is None and any("width" in n for n in _notes2))
+_mid3, _ = _syn.validate_range({"nova_fair_range": {"low": -1.0, "high": -3.0}}, -1.5)
+check("synth validate: inverted range rejected", _mid3 is None)
+
+# UPDATE CONTRACT
+_old = {"nova_fair_range": {"low": -1.5, "high": -0.5},
+        "personnel": {"goalies": "Campbell"}, "status_at_write": "PASS"}
+_new = {"nova_fair_range": {"low": -2.5, "high": -1.5},
+        "personnel": {"goalies": "Skinner"}, "status_at_write": "LEAN"}
+_d = _syn.compare_packs(_old, _new)
+check("update diff: what changed / did not / old-new fair / old-new status",
+      "fair_range" in _d["what_changed"] and "personnel" in _d["what_changed"]
+      and _d["old_fair"]["low"] == -1.5 and _d["new_fair"]["low"] == -2.5
+      and _d["old_status"] == "PASS" and _d["new_status"] == "LEAN")
+check("update diff: identical packs produce no update",
+      _syn.compare_packs(_new, dict(_new)) is None)
+check("render_update: readable block with old/new fair + status",
+      "OLD FAIR" in _syn.render_update(_d) and "NEW STATUS: LEAN" in _syn.render_update(_d))
+
+# FIXTURE SELECTION (rollout control: one game per cycle)
+_rd = {"status": "PASS", "thesis_json": None}
+_far_g = dict(_G, id="far", start_time=(datetime.now(timezone.utc) + timedelta(hours=12)).isoformat())
+_aw_g = dict(_G, id="aw", start_time=(datetime.now(timezone.utc) + timedelta(minutes=30)).isoformat())
+_fx = _syn.select_fixture([_far_g, _aw_g],
+                          {"far": _rd, "aw": {"status": "AWAITING DATA"}})
+check("fixture: soonest playable game only, AWAITING DATA skipped",
+      len(_fx) == 1 and _fx[0][0]["id"] == "far")
+
+# FAIL-OPEN: no key -> synthesis disabled, baseline always stands
+check("synth fail-open: no OPENAI_API_KEY disables MODE 2",
+      not _syn.synth_enabled() and _syn.call_synthesis("x") is None)
+_r, _pk2, _n2 = _syn.synthesize(_G, -1.5, _ctx)
+check("synth fail-open: synthesize without key returns no price",
+      _r is None and _pk2 is None and _n2)
+
+# KERNEL CONSUMPTION: validated synthesis replaces the true-line INPUT only
+_pair = {"home": {"rating": 3.5, "league_code": "NHL"}, "away": {"rating": 3.0, "league_code": "NHL"}}
+_mkts = {"spread": {"market_line": -1.5, "home_price": -110, "away_price": -110}}
+_base = reads.compute_read(_G, _pair, _mkts)
+_base_line = _base["true_line"]
+_syn_res = reads.compute_read(_G, _pair, _mkts,
+                              synth={"mid": _base_line + 0.5,
+                                     "pack": {"nova_fair_range": {"low": -2.0, "high": -1.0}}})
+check("kernel consumes validated synthesis as the true-line input",
+      abs(_syn_res["true_line"] - (_base_line + 0.5)) < 0.01
+      and "MODE2 synthesis" in str(_syn_res["telemetry"].get("synthesis")))
+_rej = reads.compute_read(_G, _pair, _mkts,
+                          synth={"mid": _base_line + 10.0,
+                                 "pack": {"nova_fair_range": {"low": -12.0, "high": -10.0}}})
+check("kernel rejects out-of-sanity synthesis; baseline stands",
+      abs(_rej["true_line"] - _base_line) < 0.01
+      and "rejected" in str(_rej["telemetry"].get("synthesis")))
+check("synthesis provenance recorded in telemetry on every path",
+      _syn_res["telemetry"].get("synthesis") is not None
+      and _rej["telemetry"].get("synthesis") is not None)
+
+# ANSWER PACK: structured analysis_pack + update intent ride thesis_json
+_ap = answers.build_pack(_G, dict(_syn_res, analysis_pack=_pk, status="LEAN"),
+                         {"doing": "x", "one_line": "y"})
+check("answer pack carries the structured analysis pack",
+      _ap.get("analysis_pack", {}).get("best_expression") == "home ML")
+check("answer pack carries update intent when a diff exists",
+      "update" in answers.build_pack(
+          _G, dict(_syn_res, analysis_pack=dict(_pk, update_diff=_d)), {"doing": "x"}))
+
+
 print()
 print("=" * 78)
 print(f"RESULT: {PASS} passed, {FAIL} failed")
