@@ -819,6 +819,105 @@ check("answer pack carries update intent when a diff exists",
           _G, dict(_syn_res, analysis_pack=dict(_pk, update_diff=_d)), {"doing": "x"}))
 
 
+
+
+# ===========================================================================
+# ANALYSIS VERSIONING (nova/versioning.py) — doctrine 34/79
+# ===========================================================================
+from nova import versioning as _ver
+import json as _json_mod
+
+_VG = {"id": "vg1", "provider_game_id": "40188", "home_team": "Rangers",
+       "away_team": "Devils", "start_time": "2026-10-15T23:00:00Z"}
+_VPAIR = {"home": {"rating": 4.0, "league_code": "NHL"},
+          "away": {"rating": 3.2, "league_code": "NHL"}}
+_VMKTS = {"spread": {"market_line": -1.5, "home_price": -115,
+                     "away_price": -105}}
+_VTAPE = [("2026-10-15T10:00:00Z", -1.5, -115), ("2026-10-15T12:00:00Z", -2.0, -110)]
+
+_h1 = _ver.input_fingerprint(_VG, _VPAIR, _VMKTS, injuries=1, tape=_VTAPE)
+_h2 = _ver.input_fingerprint(_VG, _VPAIR, _VMKTS, injuries=1, tape=_VTAPE)
+check("versioning: same inputs -> same hash (replayable)",
+      _h1 == _h2 and len(_h1) == 16)
+
+# tape timestamps are bookkeeping: only line+price path participates
+_VTAPE2 = [("2026-10-15T14:00:00Z", -1.5, -115), ("2026-10-15T16:00:00Z", -2.0, -110)]
+check("versioning: odds-row timestamps do not churn the hash",
+      _ver.input_fingerprint(_VG, _VPAIR, _VMKTS, injuries=1, tape=_VTAPE2) == _h1)
+
+# material changes mint a new hash
+check("versioning: line move changes the hash",
+      _ver.input_fingerprint(_VG, _VPAIR,
+                             {"spread": {"market_line": -2.5, "home_price": -115,
+                                         "away_price": -105}},
+                             injuries=1, tape=_VTAPE) != _h1)
+check("versioning: rating change changes the hash",
+      _ver.input_fingerprint(_VG, dict(_VPAIR, home={"rating": 4.5}), _VMKTS,
+                             injuries=1, tape=_VTAPE) != _h1)
+check("versioning: injury-detail change changes the hash",
+      _ver.input_fingerprint(_VG, _VPAIR, _VMKTS, injuries=2, tape=_VTAPE,
+                             injury_details=[{"team": "NYR", "name": "Fox"}]) != _h1)
+
+# version chain stamping
+_m1 = _ver.next_meta(None, _h1, now="2026-10-15T20:00:00Z")
+check("versioning: first analysis mints v1 with no supersedes",
+      _m1["analysis_version"] == 1 and _m1["supersedes_version"] is None
+      and _m1["input_hash"] == _h1)
+_m1b = _ver.next_meta(_m1, _h1, now="2026-10-15T20:30:00Z")
+check("versioning: unchanged inputs keep v1 + original created_at (no churn)",
+      _m1b["analysis_version"] == 1 and _m1b["created_at"] == _m1["created_at"])
+_m2 = _ver.next_meta(_m1, "deadbeef12345678", now="2026-10-15T21:00:00Z")
+check("versioning: material change mints v2 superseding v1",
+      _m2["analysis_version"] == 2 and _m2["supersedes_version"] == 1
+      and _m2["input_hash"] == "deadbeef12345678")
+
+# meta extraction from a Base44-roundtripped pack (string or object)
+_pack_s = _json_mod.dumps({"answer_pack": {"meta": _m1, "true_line": "x"}})
+check("versioning: pack_meta parses string roundtrip",
+      _ver.pack_meta(_pack_s)["analysis_version"] == 1)
+check("versioning: pack_meta parses object roundtrip",
+      _ver.pack_meta({"answer_pack": {"meta": _m1}})["input_hash"] == _h1)
+check("versioning: pack_meta rejects junk quietly",
+      _ver.pack_meta("not json") is None and _ver.pack_meta({}) is None)
+
+# MODE 1 cached-synthesis gate
+_ap_ok = {"validation": "accepted", "input_hash": _h1,
+          "effective_true_line": -2.0,
+          "created_at": (datetime.now(timezone.utc) - timedelta(minutes=30)).isoformat()}
+_ap_rej = dict(_ap_ok, validation="rejected")
+_ap_stale = dict(_ap_ok, created_at=(datetime.now(timezone.utc) - timedelta(hours=6)).isoformat())
+_ap_newhash = dict(_ap_ok, input_hash="deadbeef12345678")
+check("versioning: fresh pack with unchanged inputs is cached (MODE 1)",
+      _ver.cached_synthesis(_ap_ok, _h1, 2.0) is _ap_ok)
+check("versioning: rejected / stale / changed-hash packs force MODE 2",
+      _ver.cached_synthesis(_ap_rej, _h1, 2.0) is None
+      and _ver.cached_synthesis(_ap_stale, _h1, 2.0) is None
+      and _ver.cached_synthesis(_ap_newhash, _h1, 2.0) is None)
+
+# meta rides the answer pack end-to-end
+_rz = dict(_syn_res)
+_ap_full = answers.build_pack(_VG, dict(_rz, analysis_pack=None), {"doing": "x"},
+                              meta=_m2)
+check("answer pack carries the meta chain",
+      _ap_full.get("meta", {}).get("analysis_version") == 2
+      and _ap_full["meta"]["supersedes_version"] == 1)
+_json_out = answers.pack_json(_VG, _rz, {"doing": "x"}, meta=_m2)
+check("pack_json serializes meta inside answer_pack",
+      _ver.pack_meta(_json_out)["input_hash"] == _m2["input_hash"])
+
+# grades stamp the immutable version they postmortem
+from nova import grades as _gr
+_gr_game = dict(_VG, home_score=4.0, away_score=2.0)
+_gr_read = {"true_line_value": -1.5, "market_line": -1.0, "status": "LEAN",
+            "edge_direction": "HOME VALUE",
+            "thesis_json": _json_mod.dumps({"answer_pack": {"meta": _m2}})}
+_payload = _gr.grade_read(_gr_game, _gr_read, [])
+check("grades: postmortem carries analysis_version + input_hash",
+      _payload.get("analysis_version") == 2
+      and _payload.get("input_hash") == _m2["input_hash"]
+      and _payload.get("graded") is True)
+
+
 print()
 print("=" * 78)
 print(f"RESULT: {PASS} passed, {FAIL} failed")

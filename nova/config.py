@@ -41,6 +41,9 @@ SYNTH_SANITY_MAX = float(os.environ.get("NOVA_SYNTH_SANITY_MAX", "3.0"))
 SYNTH_MAX_RANGE_WIDTH = float(os.environ.get("NOVA_SYNTH_MAX_RANGE_WIDTH", "6.0"))
 SYNTH_MAX_GAMES = int(os.environ.get("NOVA_SYNTH_MAX_GAMES", "3"))
 SYNTH_TIMEOUT_S = int(os.environ.get("NOVA_SYNTH_TIMEOUT_S", "240"))
+# MODE 1 cached-synthesis freshness: a pack with unchanged inputs is
+# re-applied (not re-synthesized) while younger than this (doctrine 43).
+SYNTH_TTL_H = float(os.environ.get("NOVA_SYNTH_TTL_H", "2.0"))
 
 # freshness budget by proximity to start (hours)
 RESEARCH_TTL_NEAR = float(os.environ.get("NOVA_RESEARCH_TTL_NEAR", "2"))   # <4h to game

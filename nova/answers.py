@@ -41,7 +41,8 @@ def _team(game, side):
             or side.upper())
 
 
-def build_pack(game, result, narrative, news=None, context=None, research=None):
+def build_pack(game, result, narrative, news=None, context=None, research=None,
+               meta=None):
     """Return the answer-pack dict for one read, or None if nothing
     useful can be said (all fields missing). AWAITING DATA gets honest
     per-intent answers, not generic filler."""
@@ -140,6 +141,15 @@ def build_pack(game, result, narrative, news=None, context=None, research=None):
                          "signal on its own.")
             pack["team_context"] = "\n".join(lines)
 
+    # ---- analysis versioning chain (doctrine 34/79): immutable read
+    # versions ride the same canonical carrier. meta is stamped by the
+    # cycle from the deterministic input fingerprint.
+    if meta:
+        pack["meta"] = {k: meta.get(k) for k in
+                        ("analysis_version", "supersedes_version",
+                         "input_hash", "research_version", "created_at")
+                        if meta.get(k) is not None}
+
     # ---- MODE 2 analysis pack: the deep-synthesis object the read
     # consumed. Structured (never flattened) so every surface renders the
     # same canonical intelligence. update_diff carries the UPDATE
@@ -165,9 +175,11 @@ def build_pack(game, result, narrative, news=None, context=None, research=None):
     return pack or None
 
 
-def pack_json(game, result, narrative, news=None, context=None, research=None):
+def pack_json(game, result, narrative, news=None, context=None, research=None,
+                meta=None):
     """Serialized answer pack for MarketNovaRead.thesis_json, or None."""
-    pack = build_pack(game, result, narrative, news, context, research)
+    pack = build_pack(game, result, narrative, news, context, research,
+                       meta=meta)
     if not pack:
         return None
     try:

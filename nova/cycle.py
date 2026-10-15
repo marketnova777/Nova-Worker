@@ -17,7 +17,7 @@ from zoneinfo import ZoneInfo
 import json
 import sys
 
-from nova import config, espn, odds, reads, llm, enrich, props, web, answers, grades, janitor, research, synthesis
+from nova import config, espn, odds, reads, llm, enrich, props, web, answers, grades, janitor, research, synthesis, versioning
 from nova.api import Base44Client, changed_fields
 
 
@@ -352,6 +352,19 @@ def run(dry=None):
             if str(o.get("market_type") or "").lower() == "spread" and o.get("home_line") is not None:
                 tape.append((o.get("created_date"), o.get("home_line"), o.get("home_price")))
         inj_details = _injury_details(g, injuries_all)
+        # ---- analysis versioning (doctrine 34/79): immutable read chains.
+        # input_hash fingerprints the MATERIAL inputs; quiet cycles keep
+        # the prior version; material changes mint v+1 with supersedes.
+        _frm = reads.resolve_form(g, forms)
+        _pre_hash = versioning.input_fingerprint(
+            g, pair, markets, juice=juice_by_game.get(g["id"]), form=_frm,
+            movement=enrich.movement_context(rows),
+            weather=weather_by_game.get(g["id"]), rest=rest_ctx,
+            injuries=n_inj, injury_details=inj_details, tape=tape)
+        _cur_read = current_reads.get(g.get("id"))
+        _prior_meta = versioning.pack_meta(_cur_read.get("thesis_json")) \
+            if _cur_read else None
+        _meta = versioning.next_meta(_prior_meta, _pre_hash)
         result = reads.compute_read(g, pair, markets,
                                     juice=juice_by_game.get(g["id"]),
                                     form=reads.resolve_form(g, forms),
@@ -362,55 +375,85 @@ def run(dry=None):
         # ---- MODE 2 deep synthesis for fixture games only ----
         if g.get("id") in fixture_ids and result.get("status") != "AWAITING DATA":
             try:
-                _research_in = (research_by_game.get(g.get("id"))
-                                or _prior_pack_field(current_reads.get(g.get("id")),
-                                                     "live_research"))
-                _ctx = synthesis.build_context(
-                    g, result.get("true_line"),
-                    (markets.get("spread") or {}).get("market_line"),
-                    tape=tape, injuries=n_inj, injury_details=inj_details,
-                    weather=weather_by_game.get(g["id"]), rest=rest_ctx,
-                    form=reads.resolve_form(g, forms),
-                    movement=enrich.movement_context(rows), league=league_l,
-                    research=_research_in)
-                _mid, _pack, _notes = synthesis.synthesize(
-                    g, result.get("true_line"), _ctx,
-                    log=lambda m: log("synth", m))
-                for _n in _notes:
-                    log("synth", f"{g.get('away_team')}@{g.get('home_team')}: {_n}")
-                if _mid is not None and _pack:
+                # MODE 1 gate (doctrine 43): unchanged inputs + fresh pack ->
+                # reuse the stored research snapshot; no re-synthesis burn.
+                _prior_ap = _prior_pack_field(current_reads.get(g.get("id")),
+                                              "analysis_pack")
+                _cached_ap = versioning.cached_synthesis(
+                    _prior_ap, _pre_hash, config.SYNTH_TTL_H)
+                if _cached_ap:
+                    log("synth", "cached analysis pack re-applied "
+                                 "(inputs unchanged, pack fresh) — MODE 1")
                     result = reads.compute_read(
                         g, pair, markets,
-                        juice=juice_by_game.get(g["id"]),
-                        form=reads.resolve_form(g, forms),
+                        juice=juice_by_game.get(g["id"]), form=_frm,
                         movement=enrich.movement_context(rows),
                         weather=weather_by_game.get(g["id"]),
                         rest=rest_ctx, injuries=n_inj,
                         tape=tape, injury_details=inj_details,
-                        synth={"mid": _mid, "pack": _pack})
-                    _pack["status_at_write"] = result.get("status")
-                    _pack["fair_range"] = _pack.get("nova_fair_range")
-                    # UPDATE contract vs the prior canonical pack
-                    _old_ap = _prior_pack_field(current_reads.get(g.get("id")),
-                                                "analysis_pack")
-                    if _old_ap:
-                        _diff = synthesis.compare_packs(_old_ap, _pack)
-                        if _diff:
-                            _pack["update_diff"] = _diff
-                    result["analysis_pack"] = _pack
-                    # synthesized narrative fields override templates —
-                    # mechanics-level thesis per founder doctrine section 50
-                    if _pack.get("fair_price_reasoning"):
+                        synth={"mid": _cached_ap["effective_true_line"],
+                               "pack": _cached_ap})
+                    result["analysis_pack"] = _cached_ap
+                    if _cached_ap.get("fair_price_reasoning"):
                         result["thesis"] = " ".join(
-                            str(x) for x in _pack["fair_price_reasoning"][:4])
-                    if _pack.get("primary_risk"):
-                        result["risk"] = str(_pack["primary_risk"])
-                    if _pack.get("invalidators"):
-                        result["invalidators"] = _pack["invalidators"]
-                    if _pack.get("sportsbook_context"):
-                        result["why_market_here"] = str(_pack["sportsbook_context"])
+                            str(x) for x in _cached_ap["fair_price_reasoning"][:4])
+                    if _cached_ap.get("primary_risk"):
+                        result["risk"] = str(_cached_ap["primary_risk"])
+                    if _cached_ap.get("invalidators"):
+                        result["invalidators"] = _cached_ap["invalidators"]
+                    if _cached_ap.get("sportsbook_context"):
+                        result["why_market_here"] = str(_cached_ap["sportsbook_context"])
+                else:
+                    # MODE 2: fresh deep synthesis for this fixture game.
+                    _research_in = (research_by_game.get(g.get("id"))
+                                    or _prior_pack_field(current_reads.get(g.get("id")),
+                                                         "live_research"))
+                    _ctx = synthesis.build_context(
+                        g, result.get("true_line"),
+                        (markets.get("spread") or {}).get("market_line"),
+                        tape=tape, injuries=n_inj, injury_details=inj_details,
+                        weather=weather_by_game.get(g["id"]), rest=rest_ctx,
+                        form=_frm,
+                        movement=enrich.movement_context(rows), league=league_l,
+                        research=_research_in)
+                    _mid, _pack, _notes = synthesis.synthesize(
+                        g, result.get("true_line"), _ctx,
+                        log=lambda m: log("synth", m))
+                    for _n in _notes:
+                        log("synth", f"{g.get('away_team')}@{g.get('home_team')}: {_n}")
+                    if _mid is not None and _pack:
+                        # version-chain the pack to its inputs (doctrine 34)
+                        _pack["input_hash"] = _pre_hash
+                        result = reads.compute_read(
+                            g, pair, markets,
+                            juice=juice_by_game.get(g["id"]),
+                            form=_frm,
+                            movement=enrich.movement_context(rows),
+                            weather=weather_by_game.get(g["id"]),
+                            rest=rest_ctx, injuries=n_inj,
+                            tape=tape, injury_details=inj_details,
+                            synth={"mid": _mid, "pack": _pack})
+                        _pack["status_at_write"] = result.get("status")
+                        # UPDATE contract vs the prior canonical pack
+                        if _prior_ap:
+                            _diff = synthesis.compare_packs(_prior_ap, _pack)
+                            if _diff:
+                                _pack["update_diff"] = _diff
+                        result["analysis_pack"] = _pack
+                        # synthesized narrative fields override templates —
+                        # mechanics-level thesis per founder doctrine section 50
+                        if _pack.get("fair_price_reasoning"):
+                            result["thesis"] = " ".join(
+                                str(x) for x in _pack["fair_price_reasoning"][:4])
+                        if _pack.get("primary_risk"):
+                            result["risk"] = str(_pack["primary_risk"])
+                        if _pack.get("invalidators"):
+                            result["invalidators"] = _pack["invalidators"]
+                        if _pack.get("sportsbook_context"):
+                            result["why_market_here"] = str(_pack["sportsbook_context"])
             except Exception as e:
                 log("synth", f"synthesis failed (non-fatal, baseline stands): {e}")
+
         doing, one_line = reads.template_narrative(result, g)
         if current_reads.get(g["id"]) is None:  # new reads only — write budget
             richer = llm.narrate(g, result)
@@ -456,7 +499,8 @@ def run(dry=None):
             "thesis_json": answers.pack_json(g, result, result,
                                               news_by_league.get(league_l),
                                               context=_pack_ctx(g),
-                                              research=research_by_game.get(g.get("id"))),
+                                              research=research_by_game.get(g.get("id")),
+                                              meta=_meta),
             "thesis": result.get("thesis"),
             "nova_read": result.get("nova_read"),
             "risk": result.get("risk"),
@@ -574,7 +618,10 @@ def run(dry=None):
                 "one_line_read": one_line,
                 "thesis_json": answers.pack_json(
                     payload, result, result,
-                    web.league_news(lg_code.lower()), context=_pack_ctx(payload)),
+                    web.league_news(lg_code.lower()), context=_pack_ctx(payload),
+                    meta=versioning.next_meta(
+                        None, versioning.input_fingerprint(
+                            payload, pair, markets))),
             }))
     log("read", f"{len(read_patches)} reads to write")
 

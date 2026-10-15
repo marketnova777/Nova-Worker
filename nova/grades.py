@@ -73,6 +73,14 @@ def closing_line(odds_rows, kickoff=None):
     return _f(best.get("home_line")) if best else None
 
 
+
+
+def _entry_meta(read):
+    """The analysis version the postmortem grades (doctrine 34: grades
+    reference an immutable read, never a moving one)."""
+    from nova import versioning
+    return versioning.pack_meta(read.get("thesis_json")) or {}
+
 def grade_read(game, read, odds_rows, now=None):
     """Grade payload for one (final game, spread read) pair, or None when
     the inputs are missing (never a guessed grade)."""
@@ -87,7 +95,9 @@ def grade_read(game, read, odds_rows, now=None):
     status = str(read.get("status") or "").upper().strip()
     payload = {"graded": True, "grade_version": GRADE_VERSION,
                "graded_at": now.isoformat(),
-               "margin": margin, "status_at_entry": status or None}
+               "margin": margin, "status_at_entry": status or None,
+               "analysis_version": _entry_meta(read).get("analysis_version"),
+               "input_hash": _entry_meta(read).get("input_hash")}
     if true_line is None or entry is None:
         payload["notes"] = "missing true line or entry line — calibration skipped"
         return payload
