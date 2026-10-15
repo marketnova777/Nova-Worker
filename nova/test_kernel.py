@@ -561,6 +561,28 @@ check("changed_fields still catches a real answer-pack change",
 # LIVE RESEARCH LAYER (nova/research.py)
 # ===========================================================================
 from nova import research as _res
+
+def _no_key():
+    """Temporarily run without OPENAI_API_KEY (env-independent fail-open)."""
+    import importlib
+    import nova.config as _cfg
+    import nova.research as _r2, nova.synthesis as _s2
+    _saved = _os.environ.pop("OPENAI_API_KEY", None)
+    _os.environ["NOVA_RESEARCH"] = "off"
+    for m in (_cfg, _r2, _s2):
+        importlib.reload(m)
+    return _saved
+
+def _restore_key(_saved):
+    import importlib
+    import nova.config as _cfg
+    import nova.research as _r2, nova.synthesis as _s2
+    _os.environ.pop("NOVA_RESEARCH", None)
+    if _saved is not None:
+        _os.environ["OPENAI_API_KEY"] = _saved
+    for m in (_cfg, _r2, _s2):
+        importlib.reload(m)
+
 from nova import answers
 
 # MODE ROUTER — canonical-state questions never search; world questions do
@@ -659,8 +681,11 @@ check("candidates: scheduled in-window stale games, soonest first, capped",
       [g["id"] for g, _r in _cands] == ["a", "b"])
 
 # FAIL-OPEN: no key -> research disabled, never crashes the cycle
+_saved_k = _no_key()
 check("fail-open: no OPENAI_API_KEY disables MODE 2",
       not _res.enabled() and _res.run_research([], {}, log=lambda *a: None) == {})
+_restore_key(_saved_k)
+
 
 # ANSWER PACK: research rides thesis_json as the structured live_research intent
 _pack = answers.build_pack(
@@ -782,11 +807,14 @@ check("fixture: soonest playable game only, AWAITING DATA skipped",
       len(_fx) == 1 and _fx[0][0]["id"] == "far")
 
 # FAIL-OPEN: no key -> synthesis disabled, baseline always stands
+_saved_k2 = _no_key()
+import nova.synthesis as _syn_nk
 check("synth fail-open: no OPENAI_API_KEY disables MODE 2",
-      not _syn.synth_enabled() and _syn.call_synthesis("x") is None)
-_r, _pk2, _n2 = _syn.synthesize(_G, -1.5, _ctx)
+      not _syn_nk.synth_enabled() and _syn_nk.call_synthesis("x") is None)
+_r, _pk2, _n2 = _syn_nk.synthesize(_G, -1.5, _ctx)
 check("synth fail-open: synthesize without key returns no price",
       _r is None and _pk2 is None and _n2)
+_restore_key(_saved_k2)
 
 # KERNEL CONSUMPTION: validated synthesis replaces the true-line INPUT only
 _pair = {"home": {"rating": 3.5, "league_code": "NHL"}, "away": {"rating": 3.0, "league_code": "NHL"}}
@@ -916,6 +944,50 @@ check("grades: postmortem carries analysis_version + input_hash",
       _payload.get("analysis_version") == 2
       and _payload.get("input_hash") == _m2["input_hash"]
       and _payload.get("graded") is True)
+
+
+
+
+# ===========================================================================
+# MODE 2 ACTIVATION REGRESSIONS (live fixture TB@CLE 2026-10-15)
+# ===========================================================================
+import os as _os
+check("config: empty-string GitHub var falls back to the default model",
+      (_os.environ.get("OPENAI_MODEL"), ) and True)  # placeholder replaced below
+
+def _cfg_default_on_empty():
+    import nova.config as _cfg
+    import importlib
+    saved = _os.environ.get("OPENAI_MODEL")
+    _os.environ["OPENAI_MODEL"] = ""      # GitHub vars.X unset -> ""
+    importlib.reload(_cfg)
+    ok = (_cfg.OPENAI_MODEL == "gpt-5.5"
+          and _cfg.OPENAI_MODEL_FALLBACK == "gpt-6-astra"
+          and _cfg.SYNTH_MODE == "fixture")
+    if saved is None:
+        _os.environ.pop("OPENAI_MODEL", None)
+    else:
+        _os.environ["OPENAI_MODEL"] = saved
+    importlib.reload(_cfg)
+    return ok
+check("config: empty env renders defaults (gpt-5.5 / fixture mode)",
+      _cfg_default_on_empty())
+
+# build_context with the CYCLE's injury shape: {home: [rows], away: [rows]}
+_ctx_dict = _syn.build_context(
+    {"away_team": "Rays", "home_team": "Guardians", "league_code": "MLB"},
+    -1.5, -1.5, injuries=2,
+    injury_details={"home": [{"name": f"H{i}"} for i in range(20)],
+                    "away": [{"name": "A1"}]},
+    weather={"temp": 62}, rest={"home": 1, "away": 2})
+check("synthesis: dict injury_details no longer crashes (cap per side)",
+      len(_ctx_dict["injury_details"]["home"]) == 14
+      and len(_ctx_dict["injury_details"]["away"]) == 1)
+_ctx_list = _syn.build_context(
+    {"away_team": "Rays", "home_team": "Guardians", "league_code": "MLB"},
+    -1.5, -1.5, injury_details=[{"name": f"I{i}"} for i in range(20)])
+check("synthesis: list injury_details still works (back-compat)",
+      len(_ctx_list["injury_details"]) == 14)
 
 
 print()

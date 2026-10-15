@@ -25,8 +25,9 @@ LLM_MODEL = os.environ.get("LLM_MODEL", "claude-haiku-4-5")
 # OpenAI live research layer (Responses API + web_search) — optional;
 # if absent, MODE 2 is disabled and reads stay deterministic/cached.
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
-OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-5.5")
-OPENAI_MODEL_FALLBACK = os.environ.get("OPENAI_MODEL_FALLBACK", "gpt-6-astra")
+OPENAI_MODEL = os.environ.get("OPENAI_MODEL") or "gpt-5.5"
+OPENAI_MODEL_FALLBACK = (os.environ.get("OPENAI_MODEL_FALLBACK")
+                           or "gpt-6-astra")
 RESEARCH_DISABLED = os.environ.get("NOVA_RESEARCH", "") == "0"
 RESEARCH_CONTEXT_SIZE = os.environ.get("NOVA_RESEARCH_CONTEXT", "high")
 RESEARCH_MAX_GAMES = int(os.environ.get("NOVA_RESEARCH_MAX_GAMES", "6"))
@@ -36,7 +37,7 @@ RESEARCH_TIMEOUT_S = int(os.environ.get("NOVA_RESEARCH_TIMEOUT_S", "180"))
 # MODE 2 synthesis layer (OpenAI structured game-construction) — rides the
 # same OPENAI_API_KEY. Rollout: "fixture" (one game per cycle, verify before
 # widening) | "slate" | "off". Fail-open: no key -> MODE 0 baseline stands.
-SYNTH_MODE = os.environ.get("NOVA_SYNTH_MODE", "fixture")
+SYNTH_MODE = os.environ.get("NOVA_SYNTH_MODE") or "fixture"
 SYNTH_SANITY_MAX = float(os.environ.get("NOVA_SYNTH_SANITY_MAX", "3.0"))
 SYNTH_MAX_RANGE_WIDTH = float(os.environ.get("NOVA_SYNTH_MAX_RANGE_WIDTH", "6.0"))
 SYNTH_MAX_GAMES = int(os.environ.get("NOVA_SYNTH_MAX_GAMES", "3"))

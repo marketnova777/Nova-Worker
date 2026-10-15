@@ -198,7 +198,13 @@ def build_context(game, baseline, market_line, tape=None, injuries=None,
     if injuries:
         ctx["injury_count"] = injuries
     if injury_details:
-        ctx["injury_details"] = injury_details[:14]
+        # cycle passes {home: [rows], away: [rows]}; keep BOTH shapes
+        # working — cap per side for dicts, cap the list for lists.
+        if isinstance(injury_details, dict):
+            ctx["injury_details"] = {
+                k: (v or [])[:14] for k, v in injury_details.items()}
+        else:
+            ctx["injury_details"] = injury_details[:14]
     if weather:
         ctx["weather"] = weather
     if rest:
