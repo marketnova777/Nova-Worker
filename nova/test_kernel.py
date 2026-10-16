@@ -1053,6 +1053,112 @@ check("lifecycle: scheduled games untouched",
       _ret2 == [] and _kept2 == {"g1": {"id": "r1"}})
 
 
+# ============================================================
+# secondary market reads — totals + moneylines (nova/markets.py)
+# ============================================================
+from nova import markets as _mk
+# --- totals: blend math, cap, no-market contract ---
+_fr = {"home": {"last_5_json": _json.dumps([
+    {"score": 24, "opponent_score": 17, "result": "W"},
+    {"score": 31, "opponent_score": 20, "result": "W"},
+    {"score": 27, "opponent_score": 24, "result": "W"},
+    {"score": 20, "opponent_score": 10, "result": "W"}])},
+       "away": {"last_5_json": _json.dumps([
+    {"score": 13, "opponent_score": 28, "result": "L"},
+    {"score": 17, "opponent_score": 31, "result": "L"},
+    {"score": 21, "opponent_score": 27, "result": "L"}])}}
+_gm = {"league_code": "nfl", "home_team": "KC", "away_team": "SF",
+       "start_time": "2026-10-18T20:15:00Z"}
+_mr_tot = {"total": {"market_line": 47.5, "over_price": -110,
+                     "under_price": -110, "created_date": "2026-10-16T13:00:00Z"}}
+_tr = _mk.compute_total_read(_gm, _fr, _mr_tot)
+# est = (25.5+28.67)/2 + (17+17.75)/2 = 44.46; blend = .7*47.5+.3*44.46 = 46.6
+check("total: recent-form blend rounds to the model price",
+      _tr and abs(_tr["true_line"] - 46.6) < 0.05
+      and _tr["value_side"] == "under" and _tr["status"] == "PASS"
+      and _tr["edge_unit"] == "POINTS")
+check("total: no total market -> no record",
+      _mk.compute_total_read(_gm, _fr, {}) is None)
+# no form sample: market stands as fair, honest PASS with zero edge
+_tr2 = _mk.compute_total_read(_gm, None, _mr_tot)
+check("total: missing form -> market anchor stands, honest PASS",
+      _tr2 and _tr2["true_line"] == 47.5 and _tr2["raw_edge"] == 0.0
+      and "market anchor" in _tr2["true_line_basis"])
+# blend cap: extreme form sample cannot manufacture a huge edge
+_fr_ext = {"home": {"last_5_json": _json.dumps([
+    {"score": 80, "opponent_score": 0, "result": "W"}] * 4)},
+           "away": {"last_5_json": _json.dumps([
+    {"score": 0, "opponent_score": 80, "result": "L"}] * 4)}}
+_tr3 = _mk.compute_total_read(_gm, _fr_ext, _mr_tot)
+check("total: blend capped at TOTAL_BLEND_CAP",
+      _tr3 and abs(_tr3["true_line"] - 47.5) <= _mk.TOTAL_BLEND_CAP + 0.01)
+# vig penalty: heavy juice on the VALUE side is paid from the edge
+_fr_hi = {"home": {"last_5_json": _json.dumps([
+    {"score": 38, "opponent_score": 17, "result": "W"},
+    {"score": 40, "opponent_score": 20, "result": "W"},
+    {"score": 36, "opponent_score": 24, "result": "W"},
+    {"score": 38, "opponent_score": 10, "result": "W"}])},
+           "away": {"last_5_json": _json.dumps([
+    {"score": 33, "opponent_score": 21, "result": "W"},
+    {"score": 35, "opponent_score": 19, "result": "W"},
+    {"score": 31, "opponent_score": 22, "result": "W"}])}}
+_mr_juice = {"total": {"market_line": 45.5, "over_price": -150,
+                      "under_price": -110, "created_date": "2026-10-16T13:00:00Z"}}
+_tr4 = _mk.compute_total_read(_gm, _fr_hi, _mr_juice)
+check("total: value-side juice is paid from the edge",
+      _tr4 and _tr4["value_side"] == "over"
+      and "Juice costs" in _tr4["thesis"])
+
+# --- moneylines: conversion, devig, gates ---
+_mr_ml = {"moneyline": {"home_price": -150.0, "away_price": 130.0,
+                        "created_date": "2026-10-16T13:00:00Z"}}
+_mr = _mk.compute_ml_read(_gm, -3.0, _mr_ml)
+# fair home = Phi(3/13.2) = 0.590 -> fair amer -144; devig = .60/(.60+.4348)=.580
+check("moneyline: fair price from true spread (NFL sigma)",
+      _mr and abs(_mr["true_line"] - (-144.0)) < 1.0
+      and _mr["edge_unit"] == "PROBABILITY"
+      and _mr["value_side"] == "home" and _mr["status"] == "PASS")
+check("moneyline: no ML market -> no record",
+      _mk.compute_ml_read(_gm, -3.0, {}) is None)
+check("moneyline: no true spread -> no record",
+      _mk.compute_ml_read(_gm, None, _mr_ml) is None)
+# away-favorite game: value side flips correctly (sign-collapsed trap)
+_mr5 = _mk.compute_ml_read(
+    {"league_code": "nba", "home_team": "BOS", "away_team": "TOR",
+     "start_time": "2026-10-18T20:00:00Z"}, 2.5,
+    {"moneyline": {"home_price": 145.0, "away_price": -170.0,
+                   "created_date": "2026-10-16T13:00:00Z"}})
+check("moneyline: away favorite -> home dog value side named",
+      _mr5 and _mr5["value_side"] == "home"
+      and _mr5["edge_direction"] == "NOVA_FAVORS_HOME")
+# cross-market conflict (margin space, not probability space):
+# true spread -10 vs an even ML -> AWAITING DATA
+_mr6 = _mk.compute_ml_read(_gm, -10.0,
+    {"moneyline": {"home_price": -110.0, "away_price": -110.0,
+                   "created_date": "2026-10-16T13:00:00Z"}})
+check("moneyline: cross-market conflict -> AWAITING DATA with reason",
+      _mr6 and _mr6["status"] == "AWAITING DATA"
+      and "cross-market" in _mr6["reason"])
+# deep-tail read publishes but never carries action weight
+_mr7 = _mk.compute_ml_read(
+    {"league_code": "ncaaf", "home_team": "Utah", "away_team": "Kansas",
+     "start_time": "2026-10-18T20:00:00Z"}, 24.0,
+    {"moneyline": {"home_price": 2200.0, "away_price": -10000.0,
+                   "created_date": "2026-10-16T13:00:00Z"}})
+check("moneyline: outside trust band -> PASS (row exists, no action)",
+      _mr7 and _mr7["status"] == "PASS"
+      and "outside the trusted band" in _mr7["risk"])
+# float odds never crash the American formatting
+check("moneyline: float American odds render without noise",
+      _mk._fmt_amer(-150.0) == "-150" and _mk._fmt_amer(2200.0) == "+2200"
+      and _mk._fmt_amer(-144.5) == "-144.5")
+
+# --- kernel: pregame_total thresholds exist ---
+from nova import kernel as _kn_mod
+check("kernel: pregame_total threshold band present",
+      _kn_mod.PRICE_THRESHOLDS["pregame_total"]["play_gte"] == 2.0)
+
+
 print()
 print("=" * 78)
 print(f"RESULT: {PASS} passed, {FAIL} failed")

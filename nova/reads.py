@@ -114,6 +114,9 @@ def freshest_market(odds_rows):
         out[mt] = {"line": line,
                    "home_price": o.get("home_price"),
                    "away_price": o.get("away_price"),
+                   # total rows persist over/under prices (odds.py schema)
+                   "over_price": o.get("over_price"),
+                   "under_price": o.get("under_price"),
                    "book": o.get("book"),
                    "market_line": line,
                    "created_date": o.get("created_date")}

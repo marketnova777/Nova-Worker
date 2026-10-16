@@ -247,6 +247,7 @@ PRICE_THRESHOLDS = {
     "pregame_spread": {"pass_lt": 1.0, "monitor_gte": 1.0, "lean_gte": 1.5, "play_gte": 2.0, "strong_gte": 3.0},
     "first_half":     {"pass_lt": 1.0, "lean_gte": 1.0, "play_gte": 1.5, "strong_gte": 2.0},
     "second_half":    {"pass_lt": 1.5, "monitor_gte": 1.5, "lean_gte": 2.0, "play_gte": 3.0, "strong_gte": 4.0},
+    "pregame_total":  {"pass_lt": 1.0, "monitor_gte": 1.0, "lean_gte": 1.5, "play_gte": 2.0, "strong_gte": 3.0},
     "moneyline":      {"pass_lt": 2.0, "monitor_gte": 2.0, "lean_gte": 3.0, "play_gte": 4.0, "strong_gte": 6.0},
 }
 

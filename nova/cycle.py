@@ -18,7 +18,8 @@ import json
 import sys
 
 from nova import (config, espn, odds, reads, llm, enrich, props, web, answers,
-                  grades, janitor, research, synthesis, versioning, llm_queue)
+                  grades, janitor, research, synthesis, versioning, llm_queue,
+                  markets as mktreads)
 from nova.api import Base44Client, changed_fields
 
 
@@ -256,15 +257,24 @@ def run(dry=None):
                 injury_count[g["id"]] = injury_count.get(g["id"], 0) + 1
     log("enrich", f"weather rows for {len(weather_by_game)} outdoor games, "
           f"{len(injury_upserts)} injury rows")
+    current_alt = {}      # (game_id, market_type) -> current total/ML read
     for r in existing_reads:
-        if not r.get("is_current") or str(r.get("market_type", "")).lower() != "spread":
+        if not r.get("is_current"):
             continue
+        mt = str(r.get("market_type", "")).lower()
         gid = r.get("game_id")
-        if gid in seen_read_games:
-            stale_read_ids.append(r["id"])   # duplicate current read — heal
-            continue
-        seen_read_games.add(gid)
-        current_reads[gid] = r
+        if mt == "spread":
+            if gid in seen_read_games:
+                stale_read_ids.append(r["id"])   # duplicate current read — heal
+                continue
+            seen_read_games.add(gid)
+            current_reads[gid] = r
+        elif mt in ("total", "moneyline"):
+            key = (gid, mt)
+            if key in current_alt:
+                stale_read_ids.append(r["id"])   # duplicate current alt read — heal
+                continue
+            current_alt[key] = r
 
     # ---- lifecycle: retire reads on FINAL/terminal games (postgame
     # leftovers never stay on the live board; grades keep the data) ----
@@ -272,6 +282,14 @@ def run(dry=None):
     stale_read_ids.extend(retired_ids)
     if retired_ids:
         log("read", f"{len(retired_ids)} postgame reads superseded (final games)")
+    retired_alt = [r["id"] for (gid, _mt), r in current_alt.items()
+                  if gid in _terminal_game_ids(games)]
+    for rid in retired_alt:
+        stale_read_ids.append(rid)
+    for k in [k for k in current_alt if k[0] in _terminal_game_ids(games)]:
+        current_alt.pop(k, None)
+    if retired_alt:
+        log("read", f"{len(retired_alt)} postgame total/ML reads superseded")
 
     # ---------- live research (MODE 2; OpenAI web_search, optional) ------
     # Runs BEFORE read building so findings ride this cycle's answer packs.
@@ -568,7 +586,7 @@ def run(dry=None):
         cur = current_reads.get(g["id"])
         if cur is None:
             log("read", f"NEW read for {g.get('away_team')}@{g.get('home_team')}: {result['status']}")
-            read_patches.append(("__create__", g["id"], desired_read))
+            read_patches.append(("__create__", g["id"], "spread", desired_read))
         else:
             patch = changed_fields(cur, desired_read, [
                 "status", "marketnova_true_line", "raw_edge", "market_line",
@@ -588,9 +606,81 @@ def run(dry=None):
             if not patch and not cur.get("thesis_json") and desired_read.get("thesis_json"):
                 patch = {"thesis_json": desired_read["thesis_json"]}
             if patch:
-                read_patches.append((cur["id"], g["id"], patch))
+                read_patches.append((cur["id"], g["id"], "spread", patch))
+
+        # ---- secondary market reads (total + moneyline) ----
+        # One research snapshot, three market expressions (doctrine Part
+        # LV): same game, same chain, derived from the SAME canonical
+        # spread research. Missing market -> no record (honest).
+        for mtype in ("total", "moneyline"):
+            try:
+                if mtype == "total":
+                    res = mktreads.compute_total_read(g, _frm, markets)
+                else:
+                    if result.get("status") == "AWAITING DATA":
+                        continue      # no honest true spread -> no ML read
+                    res = mktreads.compute_ml_read(
+                        g, result.get("true_line"), markets)
+            except Exception as e:
+                log("read", f"{mtype} read failed for {g.get('id')} (non-fatal): {e}")
+                continue
+            if res is None:
+                continue        # market absent -> no record, honest
+            if res.get("status") == "AWAITING DATA":
+                log("read", f"{mtype} read on {g.get('away_team')}@{g.get('home_team')}: "
+                             f"AWAITING DATA ({res.get('reason', '')[:80]})")
+            desired_alt = {
+                "league_code": str(g.get("league_code") or g.get("sport") or "").upper(),
+                "sport": str(g.get("sport") or g.get("league_code") or "").upper(),
+                "status": res["status"],
+                "marketnova_true_line": res.get("true_line"),
+                "raw_edge": res.get("raw_edge"),
+                "market_line": res.get("market_line"),
+                "true_line_value": res.get("true_line"),
+                "fair_price": res.get("true_line"),
+                "edge_value": res.get("edge_value"),
+                "edge_unit": res.get("edge_unit"),
+                "edge_score_display": res.get("edge_score_display"),
+                "edge_direction": res.get("edge_direction"),
+                "market_odds": res.get("market_odds"),
+                "minimum_playable_price": res.get("minimum_playable"),
+                "playable_until": res.get("playable_until"),
+                "next_trigger": res.get("next_trigger"),
+                "invalidators": json.dumps(res.get("invalidators"))
+                    if res.get("invalidators") else None,
+                "why_market_here": (res.get("why_market_here")
+                                    or (f"AWAITING DATA: {res.get('reason')}"
+                                        if res.get("reason") else None)),
+                "true_line_basis": res.get("true_line_basis"),
+                "data_confidence": res.get("data_confidence"),
+                "confidence": res.get("confidence"),
+                "buy_to": res.get("buy_to"),
+                "thesis": res.get("thesis"),
+                "risk": res.get("risk"),
+                "data_quality_json": json.dumps(res.get("telemetry"))
+                    if res.get("telemetry") else None,
+            }
+            if mtype == "moneyline" and res.get("telemetry", {}).get("fair_prob") is not None:
+                desired_alt["marketnova_true_probability"] = res["telemetry"]["fair_prob"]
+            cur_alt_row = current_alt.get((g["id"], mtype))
+            if cur_alt_row is None:
+                log("read", f"NEW {mtype} read for {g.get('away_team')}@{g.get('home_team')}: "
+                             f"{res['status']} (fair {res.get('true_line')})")
+                read_patches.append(("__create__", g["id"], mtype, desired_alt))
+            else:
+                alt_patch = changed_fields(cur_alt_row, desired_alt, [
+                    "status", "marketnova_true_line", "raw_edge", "market_line",
+                    "true_line_value", "fair_price", "edge_value", "edge_unit",
+                    "edge_score_display", "edge_direction", "market_odds",
+                    "minimum_playable_price", "playable_until",
+                    "invalidators", "why_market_here", "true_line_basis",
+                    "data_confidence", "buy_to", "thesis", "risk",
+                    "data_quality_json"])
+                if alt_patch:
+                    read_patches.append((cur_alt_row["id"], g["id"], mtype, alt_patch))
     # first-cycle reads for games created THIS run — they'd otherwise sit
     # read-less on the board for 30 minutes until the next cycle
+    result_true_by_new = {}
     for li, (gc, lu, sup, nr) in enumerate(league_plans):
         rows_by_ref = {}
         for row in nr:
@@ -621,8 +711,9 @@ def run(dry=None):
             if richer and all(richer):
                 doing, one_line = richer
             log("read", f"NEW read for {payload.get('away_team')}@{payload.get('home_team')}: {result['status']}")
+            result_true_by_new[(li, ci)] = result.get("true_line")
             lg_code = str(payload.get("league_code") or payload.get("sport") or "").upper()
-            read_patches.append(("__new_game__", (li, ci), {
+            read_patches.append(("__new_game__", (li, ci), "spread", {
                 "league_code": lg_code,
                 "sport": lg_code,
                 "status": result["status"],
@@ -653,7 +744,69 @@ def run(dry=None):
                         None, versioning.input_fingerprint(
                             payload, pair, markets))),
             }))
-    log("read", f"{len(read_patches)} reads to write")
+    # first-cycle alt reads for newly created games (same markets dict)
+    for li, (gc, lu, sup, nr) in enumerate(league_plans):
+        rows_by_ref = {}
+        for row in nr:
+            kind, val = row.get("game_ref", ("id", None))
+            if kind == "create":
+                rows_by_ref.setdefault(val, []).append(row)
+        for ci, payload in enumerate(gc):
+            if ci not in rows_by_ref:
+                continue
+            rows = rows_by_ref[ci]
+            mk = {}
+            for row in rows:
+                mt = str(row.get("market_type", "")).lower()
+                line = (row.get("home_line") if mt == "spread"
+                        else row.get("over_line") if mt == "total"
+                        else row.get("home_price"))
+                mk[mt] = {"line": line, "market_line": line,
+                          "home_price": row.get("home_price"),
+                          "away_price": row.get("away_price")}
+            _frm_ng = reads.resolve_form(payload, forms)
+            for mtype in ("total", "moneyline"):
+                try:
+                    res = (mktreads.compute_total_read(payload, _frm_ng, mk)
+                           if mtype == "total"
+                           else (mktreads.compute_ml_read(
+                               payload, result_true_by_new.get((li, ci)), mk)
+                                 if result_true_by_new.get((li, ci)) is not None
+                                 else None))
+                except Exception as e:
+                    log("read", f"{mtype} first-cycle read failed (non-fatal): {e}")
+                    continue
+                if not res or res.get("status") == "AWAITING DATA":
+                    continue
+                read_patches.append(("__new_game__", (li, ci), mtype, {
+                    "league_code": str(payload.get("league_code") or "").upper(),
+                    "sport": str(payload.get("sport") or "").upper(),
+                    "status": res["status"],
+                    "marketnova_true_line": res.get("true_line"),
+                    "raw_edge": res.get("raw_edge"),
+                    "market_line": res.get("market_line"),
+                    "true_line_value": res.get("true_line"),
+                    "fair_price": res.get("true_line"),
+                    "edge_value": res.get("edge_value"),
+                    "edge_unit": res.get("edge_unit"),
+                    "edge_score_display": res.get("edge_score_display"),
+                    "edge_direction": res.get("edge_direction"),
+                    "market_odds": res.get("market_odds"),
+                    "minimum_playable_price": res.get("minimum_playable"),
+                    "playable_until": res.get("playable_until"),
+                    "next_trigger": res.get("next_trigger"),
+                    "why_market_here": res.get("why_market_here"),
+                    "true_line_basis": res.get("true_line_basis"),
+                    "data_confidence": res.get("data_confidence"),
+                    "buy_to": res.get("buy_to"),
+                    "thesis": res.get("thesis"),
+                    "risk": res.get("risk"),
+                }))
+    _mt_counts = {}
+    for _rp in read_patches:
+        _mt_counts[_rp[2]] = _mt_counts.get(_rp[2], 0) + 1
+    log("read", f"{len(read_patches)} reads to write "
+          + " ".join(f"({k}: {v})" for k, v in sorted(_mt_counts.items())))
 
     # ---------- postgame grading (learning loop: calibration + CLV) ----------
     try:
@@ -832,6 +985,11 @@ def run(dry=None):
 
 
 
+def _terminal_game_ids(games, terminal=("final",) + tuple(config.TERMINAL_EXEMPT)):
+    return {g.get("id") for g in games
+            if str(g.get("status") or "").lower() in terminal}
+
+
 def supersede_finals(games, current_reads, terminal=("final",) + tuple(config.TERMINAL_EXEMPT)):
     """Lifecycle rule: a read on a FINAL/terminal game is superseded the
     cycle after the game ends. Grades keep the full read record
@@ -892,17 +1050,17 @@ def write_plan(client, league_plans, game_updates, read_patches, stale_read_ids=
         client.bulk_put("MarketNovaRead",
                         [(rid, {"is_current": False}) for rid in stale_read_ids])
     read_creates, read_updates = [], []
-    for rid, gid, patch in read_patches:
+    for rid, gid, mtype, patch in read_patches:
         if rid == "__new_game__":
             li, ci = gid
             ids = created_ids_per_league[li]
             if ci < len(ids) and ids[ci]:   # game create failed -> next cycle heals
                 read_creates.append({
                     "game_id": ids[ci], "is_current": True,
-                    "market_type": "spread", **patch})
+                    "market_type": mtype, **patch})
         elif rid == "__create__":
             read_creates.append({
-                "game_id": gid, "is_current": True, "market_type": "spread", **patch})
+                "game_id": gid, "is_current": True, "market_type": mtype, **patch})
         else:
             read_updates.append((rid, patch))
     if read_creates:
