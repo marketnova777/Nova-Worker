@@ -236,8 +236,11 @@ def compute_total_read(game, form, market_rows):
             f"{true_total:.1f}. The gap is a recent-form tilt on the market anchor, "
             "not a disagreement about team strength."),
         "thesis": (
-            f"Nova's true total is {true_total:.1f} against a market {market_total:.1f} — "
-            f"{raw_edge:.1f} pts of {direction} lean."
+            (f"Nova's true total is {true_total:.1f} against a market "
+             f"{market_total:.1f} — no meaningful gap. Passing is a position."
+             if raw_edge < 0.05 else
+             f"Nova's true total is {true_total:.1f} against a market {market_total:.1f} — "
+             f"{raw_edge:.1f} pts of {direction} lean.")
             + (f" Juice costs {vig_penalty:.1f} of it." if vig_penalty else "")),
         "risk": ("Five-game scoring samples are noisy; the blend is capped at "
                  f"{TOTAL_BLEND_CAP:.0f} points for exactly that reason. Weather and "

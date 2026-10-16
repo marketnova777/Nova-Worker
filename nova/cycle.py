@@ -74,6 +74,17 @@ def run(dry=None):
     log("load", "fetching Game / TeamRating / TeamForm / MarketNovaRead")
     games = client.list_all("Game")
     ratings = client.list_all("TeamRating")
+    # daily TeamForm self-heal (UTC 00/12 cycles): stale form rows starve
+    # the total-read pace model -> honest 0.0-edge fallbacks (Oct 16 2026)
+    if datetime.now(timezone.utc).hour % 12 == 0:
+        try:
+            from nova import forms as _forms_mod
+            _stats = _forms_mod.refresh(client, [
+                l for l in config.LEAGUES if l in config.ESPN_LEAGUES])
+            _sum = {k: v[1] for k, v in _stats.items()}
+            log("form", f"TeamForm refresh: {_sum}")
+        except Exception as e:
+            log("form", f"TeamForm refresh failed (non-fatal): {e}")
     forms = client.list_all("TeamForm")
     existing_reads = client.list_all("MarketNovaRead", fields=[
         "id", "game_id", "market_type", "is_current", "status",
