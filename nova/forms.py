@@ -26,23 +26,29 @@ DEFAULT_WINDOW = 14
 LAST_N = 5
 
 
-def completed_games(league, window=DEFAULT_WINDOW):
-    """ESPN completed (final) events for the last `window` days."""
+def completed_games(league, window=DEFAULT_WINDOW, days=None):
+    """ESPN completed (final) events for the last `window` days.
+    `days` (optional) restricts fetches to known game-days — ESPN
+    throttles rapid-fire scoreboard calls and a throttled day means a
+    whole week of samples silently vanishing below the honesty gate."""
     games = []
     today = datetime.now(timezone.utc).date()
-    for delta in range(window):
-        d = today - timedelta(days=delta)
+    if days:
+        wanted = sorted(set(days))
+    else:
+        wanted = [today - timedelta(days=delta) for delta in range(window)]
+    for d in wanted:
         data = None
-        for attempt in range(3):          # ESPN throttles rapid fire —
+        for attempt in range(4):          # ESPN throttles rapid fire —
             try:                          # pace + retry, never swallow a
                 data = espn.scoreboard(league, d)   # whole game-day silently
                 break
             except Exception:
-                time.sleep(1.0 * (attempt + 1))
+                time.sleep(2.0 * (attempt + 1))
         if data is None:
             print(f"  form-backfill: {league} {d} fetch failed after retries")
             continue
-        time.sleep(0.3)
+        time.sleep(0.4)
         for ev in data.get("events", []):
             try:
                 rec = espn.parse_event(ev)
@@ -113,6 +119,31 @@ def build_forms(games, abbr_by_id=None):
     return forms, names
 
 
+def _game_days(client, league, window):
+    """Dates (UTC) on which the league actually played final games in
+    the window, per the DB's own Game records — fetch only those."""
+    days = set()
+    today = datetime.now(timezone.utc).date()
+    earliest = today - timedelta(days=window)
+    for g in client.list_all("Game", fields=["id", "league_code", "status",
+                                            "start_time"]):
+        if str(g.get("league_code") or "").lower() != league:
+            continue
+        if g.get("status") != "final":
+            continue
+        st = str(g.get("start_time") or "")
+        if not st:
+            continue
+        try:
+            dt = datetime.fromisoformat(st.replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        d = dt.astimezone(timezone.utc).date()
+        if d >= earliest:
+            days.add(d)
+    return sorted(days)
+
+
 def refresh(client, leagues, windows=None):
     """Refresh TeamForm rows for the given ESPN leagues. Returns
     {league: (games, teams, updated, created)}. Idempotent."""
@@ -129,8 +160,12 @@ def refresh(client, leagues, windows=None):
         if league not in espn.config.ESPN_LEAGUES:
             continue
         tinfo = espn.teams_info(league)   # official abbrs via id join
-        games = completed_games(
-            league, (windows or {}).get(league) or WINDOW_DAYS.get(league, DEFAULT_WINDOW))
+        win = (windows or {}).get(league) or WINDOW_DAYS.get(league, DEFAULT_WINDOW)
+        try:
+            gdays = _game_days(client, league, win)
+        except Exception:
+            gdays = None
+        games = completed_games(league, win, days=gdays)
         forms, names = build_forms(games, abbr_by_id=tinfo.get("by_id"))
         puts, creates = [], []
         now_iso = datetime.now(timezone.utc).isoformat(
@@ -163,3 +198,36 @@ def refresh(client, leagues, windows=None):
             client.bulk_create("TeamForm", creates)
         stats[league] = (len(games), len(forms), len(puts), len(creates))
     return stats
+
+
+    # dedupe: keep one row per (league, canon abbr) — ESPN's two abbr
+    # conventions and re-created rows can otherwise pile up duplicates
+    try:
+        _all = client.list_all("TeamForm", fields=["id", "team_abbr",
+                                                   "league_code",
+                                                   "last_5_json",
+                                                   "last_updated"])
+        _groups = {}
+        for r in _all:
+            _lg = str(r.get("league_code") or "").lower()
+            _groups.setdefault(
+                (_lg, matching.canon(r.get("team_abbr") or "", _lg)),
+                []).append(r)
+        _stale = []
+        for _grp in _groups.values():
+            if len(_grp) < 2:
+                continue
+            _grp.sort(key=lambda r: (len(json.loads(r.get("last_5_json")
+                                                     or "[]")),
+                                     r.get("last_updated") or ""),
+                      reverse=True)
+            _stale += [r["id"] for r in _grp[1:]]
+        for rid in _stale:
+            try:
+                client.delete("TeamForm", rid)
+            except Exception:
+                pass
+        if _stale:
+            stats["_dedupe"] = (0, 0, 0, len(_stale))
+    except Exception:
+        pass
