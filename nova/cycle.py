@@ -17,7 +17,8 @@ from zoneinfo import ZoneInfo
 import json
 import sys
 
-from nova import config, espn, odds, reads, llm, enrich, props, web, answers, grades, janitor, research, synthesis, versioning
+from nova import (config, espn, odds, reads, llm, enrich, props, web, answers,
+                  grades, janitor, research, synthesis, versioning, llm_queue)
 from nova.api import Base44Client, changed_fields
 
 
@@ -278,7 +279,12 @@ def run(dry=None):
     research_by_game = {}
     try:
         research_by_game = research.run_research(
-            games, current_reads, log=lambda m: log("research", m))
+            games, current_reads, client,
+            log=lambda m: log("research", m))
+        try:
+            llm_queue.sweep_failed(client, log=lambda m: log("research", m))
+        except Exception:
+            pass
     except Exception as e:
         log("research", f"research pass failed (non-fatal): {e}")
 
@@ -289,9 +295,6 @@ def run(dry=None):
     # downstream math and the state machine. Fail-open everywhere.
     fixture_games = []
     try:
-        if not synthesis.synth_enabled():
-            log("synth", "MODE 2 synthesis disabled (no OPENAI_API_KEY) — "
-                         "reads stay on the ratings baseline")
         if synthesis.synth_enabled():
             fixture_games = synthesis.select_fixture(games, current_reads) or []
             for _fg, _fr in fixture_games:
@@ -411,7 +414,10 @@ def run(dry=None):
                     if _cached_ap.get("sportsbook_context"):
                         result["why_market_here"] = str(_cached_ap["sportsbook_context"])
                 else:
-                    # MODE 2: fresh deep synthesis for this fixture game.
+                    # MODE 2: async Base44 AI bridge. The prompt was queued
+                    # last cycle; if the app-side function has finished the
+                    # task we consume + validate it now, otherwise we keep a
+                    # task in flight and the read rides the baseline this run.
                     _research_in = (research_by_game.get(g.get("id"))
                                     or _prior_pack_field(current_reads.get(g.get("id")),
                                                          "live_research"))
@@ -423,12 +429,29 @@ def run(dry=None):
                         form=_frm,
                         movement=enrich.movement_context(rows), league=league_l,
                         research=_research_in)
-                    _mid, _pack, _notes = synthesis.synthesize(
-                        g, result.get("true_line"), _ctx,
-                        log=lambda m: log("synth", m))
-                    for _n in _notes:
-                        log("synth", f"{g.get('away_team')}@{g.get('home_team')}: {_n}")
-                    if _mid is not None and _pack:
+                    _done = None
+                    try:
+                        _done = llm_queue.collect(client, "synthesis", g.get("id"),
+                                                  log=lambda m: log("synth", m))
+                    except Exception as e:
+                        log("synth", f"queue collect failed (non-fatal): {e}")
+                    if _done is None:
+                        synthesis.enqueue_synthesis(
+                            g, _ctx, client, log=lambda m: log("synth", m))
+                        log("synth", "synthesis task pending on the Base44 AI "
+                                     "bridge — read rides the baseline this cycle")
+                    else:
+                        _task_id, _text, _model = _done
+                        _mid, _pack, _notes = synthesis.synthesize(
+                            g, result.get("true_line"), _ctx, _text,
+                            model=_model, log=lambda m: log("synth", m))
+                        for _n in _notes:
+                            log("synth", f"{g.get('away_team')}@{g.get('home_team')}: {_n}")
+                        # consume unconditionally: a rejected/unparseable pack
+                        # must not be re-read every cycle forever
+                        llm_queue.mark_consumed(client, _task_id,
+                                                log=lambda m: log("synth", m))
+                    if _done is not None and _mid is not None and _pack:
                         # version-chain the pack to its inputs (doctrine 34)
                         _pack["input_hash"] = _pre_hash
                         result = reads.compute_read(

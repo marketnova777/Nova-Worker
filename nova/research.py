@@ -32,8 +32,7 @@ import urllib.error
 from datetime import datetime, timezone
 
 from nova import config
-
-OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
+from nova import llm_queue
 
 # Source hierarchy (lower tier = better). Domains map to the doctrine's
 # preference order: official league/team first, then injury/lineup feeds,
@@ -194,24 +193,8 @@ def build_prompt(game, read, league_label=None):
 
 
 # --------------------------------------------------------------------------
-# OPENAI CALLS
+# LLM BRIDGE (Base44 AI via the LLMTask queue — OpenAI removed Oct 16 2026)
 # --------------------------------------------------------------------------
-
-def _post_response(payload, timeout=None):
-    """POST to the OpenAI Responses API; returns parsed JSON. Raises
-    urllib.error.HTTPError on non-2xx so callers can react to status codes."""
-    req = urllib.request.Request(
-        OPENAI_RESPONSES_URL,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Authorization": f"Bearer {config.OPENAI_API_KEY}",
-            "Content-Type": "application/json",
-        },
-        method="POST")
-    with urllib.request.urlopen(req, timeout=timeout or config.RESEARCH_TIMEOUT_S) as r:
-        return json.loads(r.read().decode("utf-8"))
-
-
 def _output_text(resp):
     """Extract the assistant text and url_citation annotations from a
     Responses API payload."""
@@ -227,45 +210,6 @@ def _output_text(resp):
                         citations.append({"url": ann.get("url"),
                                           "title": ann.get("title") or ""})
     return "\n".join(texts).strip(), citations
-
-
-def call_web_research(prompt, log=lambda *a: None):
-    """One MODE 2 research call. web_search with live external access.
-
-    Uses the documented web_search tool (not the legacy web_search_preview):
-    external_web_access + search_context_size are the hosted controls.
-    Falls back to the secondary model once if the account rejects the
-    primary. Returns the response payload or None (honest fail).
-    """
-    tools = [{
-        "type": "web_search",
-        "external_web_access": True,
-        "search_context_size": config.RESEARCH_CONTEXT_SIZE,
-    }]
-    last_err = None
-    for model in (config.OPENAI_MODEL, config.OPENAI_MODEL_FALLBACK):
-        if not model or (last_err and not _is_model_error(last_err)):
-            break
-        payload = {"model": model, "tools": tools, "input": prompt}
-        for attempt in range(2):        # transient 5xx retry
-            try:
-                return _post_response(payload)
-            except urllib.error.HTTPError as e:
-                last_err = e
-                if e.code == 404 and _is_model_error(e):
-                    log(f"model {model} rejected; trying fallback")
-                    break
-                if e.code >= 500 and attempt == 0:
-                    time.sleep(2)
-                    continue
-                log(f"OpenAI {e.code} on {model}: "
-                                 f"{str(e.read()[:200] if hasattr(e, 'read') else e)}")
-                return None
-            except (urllib.error.URLError, TimeoutError, OSError) as e:
-                last_err = e
-                log(f"OpenAI unreachable: {e}")
-                return None
-    return None
 
 
 def _is_model_error(err):
@@ -482,10 +426,10 @@ def pick_candidates(games, reads_by_game, now=None, cap=None):
 # --------------------------------------------------------------------------
 
 def enabled():
-    return bool(config.OPENAI_API_KEY) and not config.RESEARCH_DISABLED
+    return not config.RESEARCH_DISABLED
 
 
-def run_research(games, reads_by_game, log=lambda *a: None, now=None):
+def run_research(games, reads_by_game, client, log=lambda *a: None, now=None):
     """MODE 2 research pass. Returns {game_id: live_research pack intent}.
 
     The findings ride the read's thesis_json answer pack; the deterministic
@@ -494,8 +438,7 @@ def run_research(games, reads_by_game, log=lambda *a: None, now=None):
     through the kernel + structured feeds.
     """
     if not enabled():
-        log("live research disabled (no OPENAI_API_KEY or "
-                        "NOVA_RESEARCH off) — MODE 0/1 only")
+        log("live research disabled (NOVA_RESEARCH=0) — MODE 0/1 only")
         return {}
     now = now or _now()
     candidates = pick_candidates(games, reads_by_game, now)
@@ -506,23 +449,36 @@ def run_research(games, reads_by_game, log=lambda *a: None, now=None):
     for g, read in candidates:
         away, home = g.get("away_team") or "?", g.get("home_team") or "?"
         label = f"{away}@{home}"
+        # 1) collect a finished bridge task (async: enqueued last cycle,
+        #    run by the app-side Base44 AI function)
         try:
-            resp = call_web_research(build_prompt(g, read), log=log)
-            if resp is None:
-                log(f"{label}: research call failed — skipped")
-                continue
-            text, citations = _output_text(resp)
-            findings = parse_research(text, citations, _iso(now))
-            if findings is None:
-                log(f"{label}: unparseable research output — skipped")
-                continue
-            intent = pack_intent(findings, _iso(now), resp.get("model") or config.OPENAI_MODEL)
-            out[g["id"]] = intent
-            log(f"{label}: {len(intent['material_changes'])} material, "
-                            f"{len(intent['confirmed_facts'])} confirmed, "
-                            f"{len(intent['sources'])} sources"
-                            + (" — REANALYSIS REQUIRED" if intent["reanalysis_required"] else ""))
+            done = llm_queue.collect(client, "research", g.get("id"), log=log)
+        except Exception as e:
+            log(f"{label}: queue error (non-fatal): {e}")
+            done = None
+        if done is not None:
+            task_id, text, model = done
+            try:
+                findings = parse_research(text, [], _iso(now))
+                if findings is None:
+                    log(f"{label}: unparseable research output — skipped")
+                else:
+                    intent = pack_intent(findings, _iso(now), model)
+                    out[g["id"]] = intent
+                    log(f"{label}: {len(intent['material_changes'])} material, "
+                                 f"{len(intent['confirmed_facts'])} confirmed, "
+                                 f"{len(intent['sources'])} sources"
+                        + (" — REANALYSIS REQUIRED" if intent["reanalysis_required"] else ""))
+            except Exception as e:
+                log(f"{label}: research parse error (non-fatal): {e}")
+            finally:
+                llm_queue.mark_consumed(client, task_id, log=log)
+            continue
+        # 2) no result yet — make sure a task is in flight
+        try:
+            llm_queue.enqueue(client, "research", g.get("id"),
+                              build_prompt(g, read), log=log)
         except Exception as e:            # research must never break a cycle
-            log(f"{label}: research error (non-fatal): {e}")
+            log(f"{label}: enqueue error (non-fatal): {e}")
     log(f"{len(out)}/{len(candidates)} games researched this cycle")
     return out

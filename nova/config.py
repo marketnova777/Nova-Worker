@@ -22,21 +22,21 @@ LLM_API_KEY = os.environ.get("LLM_API_KEY", "")  # Anthropic-style key
 LLM_MODEL = os.environ.get("LLM_MODEL", "claude-haiku-4-5")
 
 
-# OpenAI live research layer (Responses API + web_search) — optional;
-# if absent, MODE 2 is disabled and reads stay deterministic/cached.
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
-OPENAI_MODEL = os.environ.get("OPENAI_MODEL") or "gpt-5.5"
-OPENAI_MODEL_FALLBACK = (os.environ.get("OPENAI_MODEL_FALLBACK")
-                           or "gpt-6-astra")
+# LLM bridge (Base44 AI, Oct 16 2026): OpenAI is removed. The worker
+# cannot reach Base44's gateway externally, so prompts go through the
+# LLMTask queue; an app-side function runs them on Base44 AI credits.
+# No queue entity -> honest fail-open, reads stay deterministic/cached.
+LLM_QUEUE_ENTITY = os.environ.get("NOVA_LLM_QUEUE_ENTITY") or "LLMTask"
 RESEARCH_DISABLED = os.environ.get("NOVA_RESEARCH", "") == "0"
 RESEARCH_CONTEXT_SIZE = os.environ.get("NOVA_RESEARCH_CONTEXT", "high")
 RESEARCH_MAX_GAMES = int(os.environ.get("NOVA_RESEARCH_MAX_GAMES", "6"))
 RESEARCH_WINDOW_H = float(os.environ.get("NOVA_RESEARCH_WINDOW_H", "48"))
 RESEARCH_TIMEOUT_S = int(os.environ.get("NOVA_RESEARCH_TIMEOUT_S", "180"))
 
-# MODE 2 synthesis layer (OpenAI structured game-construction) — rides the
-# same OPENAI_API_KEY. Rollout: "fixture" (one game per cycle, verify before
-# widening) | "slate" | "off". Fail-open: no key -> MODE 0 baseline stands.
+# MODE 2 synthesis layer (structured game-construction) — runs on the
+# Base44 AI bridge (LLMTask queue). Rollout: "fixture" (one game per
+# cycle, verify before widening) | "slate" | "off". Fail-open: no queue
+# entity -> MODE 0 baseline stands.
 SYNTH_MODE = os.environ.get("NOVA_SYNTH_MODE") or "fixture"
 SYNTH_SANITY_MAX = float(os.environ.get("NOVA_SYNTH_SANITY_MAX", "3.0"))
 SYNTH_MAX_RANGE_WIDTH = float(os.environ.get("NOVA_SYNTH_MAX_RANGE_WIDTH", "6.0"))

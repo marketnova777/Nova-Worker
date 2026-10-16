@@ -563,12 +563,15 @@ check("changed_fields still catches a real answer-pack change",
 from nova import research as _res
 
 def _no_key():
-    """Temporarily run without OPENAI_API_KEY (env-independent fail-open)."""
+    """Temporarily disable research/synthesis (env-independent fail-open).
+    OpenAI is gone (Oct 16 2026); the flag is the only gate now."""
     import importlib
     import nova.config as _cfg
     import nova.research as _r2, nova.synthesis as _s2
-    _saved = _os.environ.pop("OPENAI_API_KEY", None)
-    _os.environ["NOVA_RESEARCH"] = "off"
+    _saved = (_os.environ.pop("NOVA_RESEARCH", None),
+              _os.environ.pop("NOVA_SYNTH_MODE", None))
+    _os.environ["NOVA_RESEARCH"] = "0"
+    _os.environ["NOVA_SYNTH_MODE"] = "off"
     for m in (_cfg, _r2, _s2):
         importlib.reload(m)
     return _saved
@@ -578,8 +581,11 @@ def _restore_key(_saved):
     import nova.config as _cfg
     import nova.research as _r2, nova.synthesis as _s2
     _os.environ.pop("NOVA_RESEARCH", None)
-    if _saved is not None:
-        _os.environ["OPENAI_API_KEY"] = _saved
+    _os.environ.pop("NOVA_SYNTH_MODE", None)
+    if _saved[0] is not None:
+        _os.environ["NOVA_RESEARCH"] = _saved[0]
+    if _saved[1] is not None:
+        _os.environ["NOVA_SYNTH_MODE"] = _saved[1]
     for m in (_cfg, _r2, _s2):
         importlib.reload(m)
 
@@ -682,8 +688,13 @@ check("candidates: scheduled in-window stale games, soonest first, capped",
 
 # FAIL-OPEN: no key -> research disabled, never crashes the cycle
 _saved_k = _no_key()
-check("fail-open: no OPENAI_API_KEY disables MODE 2",
-      not _res.enabled() and _res.run_research([], {}, log=lambda *a: None) == {})
+class _NoQueueClient:
+    """Offline client whose LLMTask entity is missing -> fail-open."""
+    def list_all(self, entity, fields=None, query=None):
+        raise RuntimeError("list LLMTask failed 404")
+check("fail-open: research flag off disables MODE 2",
+      not _res.enabled() and _res.run_research([], {}, _NoQueueClient(),
+                                               log=lambda *a: None) == {})
 _restore_key(_saved_k)
 
 
@@ -809,10 +820,10 @@ check("fixture: soonest playable game only, AWAITING DATA skipped",
 # FAIL-OPEN: no key -> synthesis disabled, baseline always stands
 _saved_k2 = _no_key()
 import nova.synthesis as _syn_nk
-check("synth fail-open: no OPENAI_API_KEY disables MODE 2",
-      not _syn_nk.synth_enabled() and _syn_nk.call_synthesis("x") is None)
-_r, _pk2, _n2 = _syn_nk.synthesize(_G, -1.5, _ctx)
-check("synth fail-open: synthesize without key returns no price",
+check("synth fail-open: flag off disables MODE 2",
+      not _syn_nk.synth_enabled())
+_r, _pk2, _n2 = _syn_nk.synthesize(_G, -1.5, _ctx, "")
+check("synth fail-open: empty bridge result returns no price",
       _r is None and _pk2 is None and _n2)
 _restore_key(_saved_k2)
 
@@ -949,29 +960,60 @@ check("grades: postmortem carries analysis_version + input_hash",
 
 
 # ===========================================================================
-# MODE 2 ACTIVATION REGRESSIONS (live fixture TB@CLE 2026-10-15)
+# LLM BRIDGE REGRESSIONS (Base44 AI queue, OpenAI removed Oct 16 2026)
 # ===========================================================================
+import nova.config as _cfg_mod
 import os as _os
-check("config: empty-string GitHub var falls back to the default model",
-      (_os.environ.get("OPENAI_MODEL"), ) and True)  # placeholder replaced below
+from nova import llm_queue as _lq
 
-def _cfg_default_on_empty():
-    import nova.config as _cfg
-    import importlib
-    saved = _os.environ.get("OPENAI_MODEL")
-    _os.environ["OPENAI_MODEL"] = ""      # GitHub vars.X unset -> ""
-    importlib.reload(_cfg)
-    ok = (_cfg.OPENAI_MODEL == "gpt-5.5"
-          and _cfg.OPENAI_MODEL_FALLBACK == "gpt-6-astra"
-          and _cfg.SYNTH_MODE == "fixture")
-    if saved is None:
-        _os.environ.pop("OPENAI_MODEL", None)
-    else:
-        _os.environ["OPENAI_MODEL"] = saved
-    importlib.reload(_cfg)
-    return ok
-check("config: empty env renders defaults (gpt-5.5 / fixture mode)",
-      _cfg_default_on_empty())
+check("config: bridge defaults (LLMTask entity, fixture mode)",
+      _cfg_mod.LLM_QUEUE_ENTITY == "LLMTask" and _cfg_mod.SYNTH_MODE == "fixture")
+
+class _MemQueueClient:
+    """Offline in-memory Base44 client stand-in for queue tests."""
+    def __init__(self):
+        self.rows, self._n = [], 0
+    def list_all(self, entity, fields=None, query=None):
+        return [dict(r) for r in self.rows]
+    def create(self, entity, data):
+        self._n += 1
+        rec = dict(data); rec["id"] = f"t{self._n}"
+        self.rows.append(rec)
+        return rec
+    def put(self, entity, rid, data):
+        for r in self.rows:
+            if r["id"] == rid:
+                r.update(data)
+        return {}
+    def bulk_put(self, entity, pairs):
+        for rid, data in pairs:
+            self.put(entity, rid, data)
+        return {}
+
+_qc = _MemQueueClient()
+_p = "SYNTHESIS PROMPT BODY"
+_i1 = _lq.enqueue(_qc, "synthesis", "g1", _p)
+check("queue: enqueue creates a pending task", _i1 is not None
+      and _qc.rows[0]["status"] == "pending"
+      and _qc.rows[0]["dedupe_key"] == "synthesis:g1")
+check("queue: duplicate task is not re-enqueued",
+      _lq.enqueue(_qc, "synthesis", "g1", _p) is None)
+check("queue: collect returns nothing while pending",
+      _lq.collect(_qc, "synthesis", "g1") is None)
+_qc.put("LLMTask", _i1, {"status": "done", "result_text": "PACK JSON",
+                         "model": "base44-ai"})
+_t, _txt, _mdl = _lq.collect(_qc, "synthesis", "g1")
+check("queue: collect returns a finished unconsumed task",
+      _t == _i1 and _txt == "PACK JSON" and _mdl == "base44-ai")
+_lq.mark_consumed(_qc, _t)
+check("queue: consumed task no longer collects; re-enqueue allowed",
+      _lq.collect(_qc, "synthesis", "g1") is None
+      and _lq.enqueue(_qc, "synthesis", "g1", _p) is not None)
+_i2 = _lq.enqueue(_qc, "research", "g2", "RESEARCH PROMPT")
+_qc.put("LLMTask", _i2, {"status": "failed", "error": "boom"})
+check("queue: sweep_failed unblocks re-enqueue of failed tasks",
+      _lq.sweep_failed(_qc) >= 1
+      and _lq.enqueue(_qc, "research", "g2", "RESEARCH PROMPT") is not None)
 
 # build_context with the CYCLE's injury shape: {home: [rows], away: [rows]}
 _ctx_dict = _syn.build_context(

@@ -30,7 +30,8 @@ import urllib.request
 import urllib.error
 
 from nova import config, doctrine
-from nova.research import (OPENAI_RESPONSES_URL, _output_text, _extract_json,
+from nova import llm_queue
+from nova.research import (_output_text, _extract_json,
                            _iso, _now, _parse_dt)
 
 SYNTH_VERSION = "2"
@@ -258,52 +259,6 @@ def build_prompt(game, context, league=None):
 # CALL + PARSE + VALIDATE
 # --------------------------------------------------------------------------
 
-def call_synthesis(prompt, log=lambda *a: None):
-    """One synthesis call (no web tool — the model reasons over supplied
-    evidence). Same model chain + fallback as the research layer."""
-    if not config.OPENAI_API_KEY:
-        return None
-    payload = {"model": config.OPENAI_MODEL, "input": prompt}
-    last_err = None
-    for model in (config.OPENAI_MODEL, config.OPENAI_MODEL_FALLBACK):
-        if not model or (last_err is not None and not _is_model_error(last_err)):
-            break
-        payload["model"] = model
-        try:
-            req = urllib.request.Request(
-                OPENAI_RESPONSES_URL,
-                data=json.dumps(payload).encode("utf-8"),
-                headers={"Authorization": f"Bearer {config.OPENAI_API_KEY}",
-                         "Content-Type": "application/json"},
-                method="POST")
-            with urllib.request.urlopen(
-                    req, timeout=config.SYNTH_TIMEOUT_S) as r:
-                return json.loads(r.read().decode("utf-8"))
-        except urllib.error.HTTPError as e:
-            last_err = e
-            if e.code == 404 and _is_model_error(e):
-                log(f"model {model} rejected; trying fallback")
-                continue
-            log(f"OpenAI {e.code} on synthesis: "
-                f"{str(e.read()[:200] if hasattr(e, 'read') else e)}")
-            return None
-        except (urllib.error.URLError, TimeoutError, OSError) as e:
-            last_err = e
-            log(f"OpenAI unreachable for synthesis: {e}")
-            return None
-    return None
-
-
-def _is_model_error(err):
-    try:
-        body = err.read().decode("utf-8", "replace") if hasattr(err, "read") else str(err)
-    except Exception:
-        body = str(err)
-    return "model" in body.lower() and ("not_found" in body.lower()
-                                       or "does not exist" in body.lower()
-                                       or "unsupported" in body.lower())
-
-
 def parse_pack(text):
     """Extract + shape-check the analysis pack. Returns dict or None."""
     data = _extract_json(text)
@@ -375,11 +330,9 @@ def validate_range(pack, baseline):
 # --------------------------------------------------------------------------
 
 def synth_enabled():
-    if not config.OPENAI_API_KEY:
-        return False
-    return str(config.SYNTH_MODE).lower() not in ("off", "0", "none")
-
-
+    """MODE 2 on/off flag. The queue entity gate happens at
+    enqueue/collect time - a missing LLMTask entity fails open."""
+    return config.SYNTH_MODE != "off"
 def select_fixture(games, reads_by_game, now=None):
     """Fixture mode: exactly one deep-analysis game per cycle — the
     soonest-starting scheduled game with a current read that isn't
@@ -475,25 +428,35 @@ def render_update(diff):
 # ENTRY POINT (called from the read loop for the fixture game)
 # --------------------------------------------------------------------------
 
-def synthesize(game, baseline, context, log=lambda *a: None):
-    """Full MODE 2 pass for one game. Returns (validated_mid, pack, notes)
-    or (None, None, notes) on any failure — the deterministic baseline
-    always stands when synthesis cannot produce a validated range."""
-    notes = []
+def enqueue_synthesis(game, context, client, log=lambda *a: None):
+    """Queue the synthesis prompt for the app-side Base44 AI function.
+    Returns True if a task is in flight (created or already pending)."""
     prompt = build_prompt(game, context)
-    resp = call_synthesis(prompt, log=log)
-    if resp is None:
-        return None, None, ["synthesis call failed — baseline stands"]
-    text, _cits = _output_text(resp)
-    pack = parse_pack(text)
+    try:
+        return llm_queue.enqueue(client, "synthesis", game.get("id"),
+                                  prompt, log=log) is not None
+    except Exception as e:
+        log(f"synthesis enqueue failed (non-fatal): {str(e)[:150]}")
+        return False
+
+
+def synthesize(game, baseline, context, result_text,
+               model="base44-ai", log=lambda *a: None):
+    """Validate + consume a finished bridge result. Returns
+    (validated_mid, pack, notes) or (None, None/pack, notes) - the
+    deterministic baseline always stands when the pack fails validation."""
+    notes = []
+    if not result_text:
+        return None, None, ["no synthesis result - baseline stands"]
+    pack = parse_pack(result_text)
     if pack is None:
-        return None, None, ["synthesis output failed the pack contract — baseline stands"]
-    pack["model"] = resp.get("model") or config.OPENAI_MODEL
+        return None, None, ["synthesis output failed the pack contract - baseline stands"]
+    pack["model"] = model
     mid, vnotes = validate_range(pack, baseline)
     notes.extend(vnotes)
     if mid is None:
         pack["validation"] = "rejected: " + "; ".join(vnotes)
-        return None, pack, notes        # pack kept for debugging, price unchanged
+        return None, pack, notes   # pack kept for debugging, price unchanged
     pack["validation"] = "accepted"
     pack["baseline_true_line"] = baseline
     pack["effective_true_line"] = mid
