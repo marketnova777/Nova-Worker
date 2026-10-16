@@ -42,6 +42,7 @@ def parse_event(ev):
             "abbr": (c.get("team") or {}).get("abbreviation"),
             "name": (c.get("team") or {}).get("displayName"),
             "score": c.get("score"),
+            "team_id": (c.get("team") or {}).get("id"),
         }
         if c.get("homeAway") == "home":
             home = side
@@ -74,6 +75,8 @@ def parse_event(ev):
     return {
         "odds": rec_odds,
         "espn_id": ev.get("id"),
+        "home_team_id": home["team_id"] if home else None,
+        "away_team_id": away["team_id"] if away else None,
         "start_time": ev.get("date"),
         "status": status.get("name", "").lower(),
         "status_detail": status.get("description", ""),
@@ -117,24 +120,39 @@ def normalize_status(status, status_detail):
 def teams_map(league):
     """{canon(name): abbr} for a league from the ESPN team list.
     Covers display + short display names. Returns {} on failure."""
-    out = {}
+    return {k: v for k, v in teams_info(league).get("names", {}).items()}
+
+
+def teams_info(league):
+    """One ESPN teams-endpoint fetch ->
+    {"names": {canon(name): official_abbr},
+     "by_id": {team_id: official_abbr}}
+    ESPN has TWO abbr conventions: the official team-list abbreviation
+    (OU, KC, OKC) and the scoreboard abbreviation (OKLA, K.C., GS).
+    The official one is canonical everywhere in Nova (fixed Oct 16
+    2026); scoreboard abbrs get translated via team-id join."""
+    names, by_id = {}, {}
     try:
         data = fetch_json(f"{config.ESPN_BASE}/"
                           f"{config.ESPN_LEAGUES[league]}/teams?limit=500")
     except Exception:
-        return out
+        return {"names": names, "by_id": by_id}
+    from nova import matching
     for wrapped in ((data.get("sports") or [{}])[0]
                     .get("leagues", [{}])[0].get("teams", [])):
         t = wrapped.get("team", wrapped)
         abbr = t.get("abbreviation")
+        tid = str(t.get("id") or "")
         if not abbr:
             continue
+        abbr = abbr.upper()
+        if tid:
+            by_id[tid] = abbr
         for key in ("displayName", "shortDisplayName", "name"):
             v = t.get(key)
             if v:
-                from nova import matching
-                out[matching.canon(v, league)] = abbr.upper()
-    return out
+                names[matching.canon(v, league)] = abbr
+    return {"names": names, "by_id": by_id}
 
 
 def collect_events(league, days):

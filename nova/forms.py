@@ -14,12 +14,14 @@ Idempotent, canon-aware, honest on missing data.
 """
 
 import json
+import time
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 
 from nova import espn, matching
 
-WINDOW_DAYS = {"nba": 21, "nfl": 14, "nhl": 14, "mlb": 14, "wnba": 14}
+WINDOW_DAYS = {"nba": 21, "nfl": 28, "ncaaf": 21, "nhl": 14, "mlb": 14,
+               "wnba": 14}
 DEFAULT_WINDOW = 14
 LAST_N = 5
 
@@ -30,10 +32,17 @@ def completed_games(league, window=DEFAULT_WINDOW):
     today = datetime.now(timezone.utc).date()
     for delta in range(window):
         d = today - timedelta(days=delta)
-        try:
-            data = espn.scoreboard(league, d)
-        except Exception:
+        data = None
+        for attempt in range(3):          # ESPN throttles rapid fire —
+            try:                          # pace + retry, never swallow a
+                data = espn.scoreboard(league, d)   # whole game-day silently
+                break
+            except Exception:
+                time.sleep(1.0 * (attempt + 1))
+        if data is None:
+            print(f"  form-backfill: {league} {d} fetch failed after retries")
             continue
+        time.sleep(0.3)
         for ev in data.get("events", []):
             try:
                 rec = espn.parse_event(ev)
@@ -54,30 +63,44 @@ def completed_games(league, window=DEFAULT_WINDOW):
     return games
 
 
-def build_forms(games):
-    """{team_abbr: chronological last-N rows} for both sides."""
+def build_forms(games, abbr_by_id=None):
+    """{official_abbr: chronological last-N rows} for both sides.
+    abbr_by_id ({team_id: official_abbr}) translates ESPN scoreboard
+    abbrs (OKLA) to official abbrs (OU) via the team-id join."""
+    abbr_by_id = abbr_by_id or {}
     per_team = defaultdict(list)
     names = {}
     for rec in games:
         st = str(rec.get("start_time") or "")
-        if rec.get("home_abbr") and rec.get("home_name"):
-            names.setdefault(rec["home_abbr"], rec["home_name"])
-        if rec.get("away_abbr") and rec.get("away_name"):
-            names.setdefault(rec["away_abbr"], rec["away_name"])
-        for my_abbr, my_score, opp_abbr, opp_score, home in (
-                (rec.get("home_abbr"), rec.get("home_score"),
-                 rec.get("away_abbr"), rec.get("away_score"), True),
-                (rec.get("away_abbr"), rec.get("away_score"),
-                 rec.get("home_abbr"), rec.get("home_score"), False)):
-            if not my_abbr:
+        for tid_key, abbr_key, name_key in (
+                ("home_team_id", "home_abbr", "home_name"),
+                ("away_team_id", "away_abbr", "away_name")):
+            tid = str(rec.get(tid_key) or "")
+            nm = rec.get(name_key)
+            key = (abbr_by_id.get(tid) if tid else None) \
+                or (rec.get(abbr_key) if not abbr_by_id else None)
+            if key and nm:
+                names.setdefault(key, nm)
+        for my_abbr, my_id, my_score, opp_abbr, opp_id, opp_score, home in (
+                (rec.get("home_abbr"), rec.get("home_team_id"),
+                 rec.get("home_score"),
+                 rec.get("away_abbr"), rec.get("away_team_id"),
+                 rec.get("away_score"), True),
+                (rec.get("away_abbr"), rec.get("away_team_id"),
+                 rec.get("away_score"),
+                 rec.get("home_abbr"), rec.get("home_team_id"),
+                 rec.get("home_score"), False)):
+            my_key = abbr_by_id.get(str(my_id or "")) or my_abbr
+            opp_key = abbr_by_id.get(str(opp_id or "")) or opp_abbr
+            if not my_key:
                 continue
             try:
                 ms, os_ = float(my_score), float(opp_score)
             except (TypeError, ValueError):
                 continue
-            per_team[my_abbr].append({
+            per_team[my_key].append({
                 "date": st,
-                "opponent": opp_abbr,
+                "opponent": opp_key,
                 "score": int(ms),
                 "opponent_score": int(os_),
                 "home": home,
@@ -105,8 +128,10 @@ def refresh(client, leagues, windows=None):
     for league in leagues:
         if league not in espn.config.ESPN_LEAGUES:
             continue
-        games = completed_games(league, windows.get(league, DEFAULT_WINDOW))
-        forms, names = build_forms(games)
+        tinfo = espn.teams_info(league)   # official abbrs via id join
+        games = completed_games(
+            league, (windows or {}).get(league) or WINDOW_DAYS.get(league, DEFAULT_WINDOW))
+        forms, names = build_forms(games, abbr_by_id=tinfo.get("by_id"))
         puts, creates = [], []
         now_iso = datetime.now(timezone.utc).isoformat(
             timespec="seconds").replace("+00:00", "Z")

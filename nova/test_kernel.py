@@ -1153,6 +1153,85 @@ check("moneyline: float American odds render without noise",
       _mk._fmt_amer(-150.0) == "-150" and _mk._fmt_amer(2200.0) == "+2200"
       and _mk._fmt_amer(-144.5) == "-144.5")
 
+# --- resolve_form: NBA games carry NAMES, form rows carry abbrs ---
+_frm_rows = [
+    {"team_abbr": "OKC", "team_name": "Oklahoma City Thunder",
+     "league_code": "nba", "last_5_json": _json.dumps([])},
+    {"team_abbr": "DEN", "team_name": "Denver Nuggets",
+     "league_code": "nba", "last_5_json": _json.dumps([])},
+    {"team_abbr": "GS", "team_name": "Golden State Warriors",
+     "league_code": "nba", "last_5_json": _json.dumps([])},
+]
+_frm_g = {"league_code": "nba", "home_team": "Oklahoma City Thunder",
+          "away_team": "Denver Nuggets"}
+_frm_res = reads.resolve_form(_frm_g, _frm_rows)
+check("resolve_form: name-keyed game matches abbr-keyed form rows",
+      _frm_res and _frm_res.get("home", {}).get("team_abbr") == "OKC"
+      and _frm_res.get("away", {}).get("team_abbr") == "DEN")
+_frm_res2 = reads.resolve_form(
+    {"league_code": "nba", "home_team": "Golden State Warriors",
+     "away_team": "Denver Nuggets"}, _frm_rows)
+check("resolve_form: name fallback covers alias abbrs too",
+      _frm_res2 and _frm_res2.get("home", {}).get("team_abbr") == "GS")
+_frm_res3 = reads.resolve_form(
+    {"league_code": "nba", "home_team": "Nobody State",
+     "away_team": "Denver Nuggets"}, _frm_rows)
+check("resolve_form: unknown team -> None side, honest",
+      _frm_res3 and _frm_res3.get("home") is None
+      and _frm_res3.get("away", {}).get("team_abbr") == "DEN")
+
+# --- forms.build_forms captures display names ---
+_names_games = [{
+    "start_time": "2026-10-10T00:00Z", "status": "STATUS_FINAL",
+    "status_detail": "Final", "home_abbr": "OKC",
+    "home_name": "Oklahoma City Thunder", "home_score": "110",
+    "away_abbr": "DEN", "away_name": "Denver Nuggets", "away_score": "100",
+}]
+_forms_out, _names_out = __import__("nova.forms", fromlist=["x"]).build_forms(_names_games)
+check("forms: build_forms returns last-5 rows AND display names",
+      _forms_out["OKC"][0]["result"] == "W"
+      and _names_out.get("OKC") == "Oklahoma City Thunder"
+      and _names_out.get("DEN") == "Denver Nuggets")
+
+# --- resolve_form via espn name_map (NBA name-keyed games) ---
+_frm_rows2 = [
+    {"team_abbr": "OKC", "team_name": "Oklahoma City Thunder",
+     "league_code": "nba", "last_5_json": _json.dumps([{"score": 1}] * 3)},
+    {"team_abbr": "DEN", "team_name": "Denver Nuggets",
+     "league_code": "nba", "last_5_json": _json.dumps([{"score": 1}] * 3)},
+]
+from nova import matching as _matching_mod
+_nm = {"nba": {_matching_mod.canon("Oklahoma City Thunder", "nba"): "OKC",
+              _matching_mod.canon("Denver Nuggets", "nba"): "DEN",
+              _matching_mod.canon("Thunder", "nba"): "OKC"}}
+_frm_res4 = reads.resolve_form(
+    {"league_code": "nba", "home_team": "Oklahoma City Thunder",
+     "away_team": "Denver Nuggets"}, _frm_rows2, name_map=_nm)
+check("resolve_form: espn name_map resolves name-keyed game",
+      _frm_res4 and _frm_res4.get("home", {}).get("team_abbr") == "OKC"
+      and _frm_res4.get("away", {}).get("team_abbr") == "DEN")
+_frm_res5 = reads.resolve_form(
+    {"league_code": "nba", "home_team": "Thunder",
+     "away_team": "Denver Nuggets"}, _frm_rows2, name_map=_nm)
+check("resolve_form: short display names resolve too",
+      _frm_res5 and _frm_res5.get("home", {}).get("team_abbr") == "OKC")
+
+# --- forms: ESPN scoreboard abbr -> official abbr translation ---
+_f_games = [{
+    "start_time": "2026-10-10T00:00Z", "status": "STATUS_FINAL",
+    "status_detail": "Final", "home_abbr": "OKLA", "home_team_id": "201",
+    "home_name": "Oklahoma Sooners", "home_score": "30",
+    "away_abbr": "UK", "away_team_id": "96",
+    "away_name": "Kentucky Wildcats", "away_score": "10",
+}]
+_f_info = {"names": {"OKLAHOMASOONERS": "OU"}, "by_id": {"201": "OU", "96": "UK"}}
+_f_forms, _f_names = __import__("nova.forms", fromlist=["x"]).build_forms(
+    _f_games, abbr_by_id=_f_info["by_id"])
+check("forms: scoreboard OKLA translated to official OU via team-id join",
+      "OU" in _f_forms and _f_forms["OU"][0]["opponent"] == "UK"
+      and _f_forms["OU"][0]["result"] == "W"
+      and _f_names.get("OU") == "Oklahoma Sooners")
+
 # --- kernel: pregame_total thresholds exist ---
 from nova import kernel as _kn_mod
 check("kernel: pregame_total threshold band present",
