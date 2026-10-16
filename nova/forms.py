@@ -57,8 +57,13 @@ def completed_games(league, window=DEFAULT_WINDOW):
 def build_forms(games):
     """{team_abbr: chronological last-N rows} for both sides."""
     per_team = defaultdict(list)
+    names = {}
     for rec in games:
         st = str(rec.get("start_time") or "")
+        if rec.get("home_abbr") and rec.get("home_name"):
+            names.setdefault(rec["home_abbr"], rec["home_name"])
+        if rec.get("away_abbr") and rec.get("away_name"):
+            names.setdefault(rec["away_abbr"], rec["away_name"])
         for my_abbr, my_score, opp_abbr, opp_score, home in (
                 (rec.get("home_abbr"), rec.get("home_score"),
                  rec.get("away_abbr"), rec.get("away_score"), True),
@@ -82,7 +87,7 @@ def build_forms(games):
     for abbr, rows in per_team.items():
         rows.sort(key=lambda r: str(r.get("date") or ""))
         forms[abbr] = rows[-LAST_N:]
-    return forms
+    return forms, names
 
 
 def refresh(client, leagues, windows=None):
@@ -101,14 +106,14 @@ def refresh(client, leagues, windows=None):
         if league not in espn.config.ESPN_LEAGUES:
             continue
         games = completed_games(league, windows.get(league, DEFAULT_WINDOW))
-        forms = build_forms(games)
+        forms, names = build_forms(games)
         puts, creates = [], []
         now_iso = datetime.now(timezone.utc).isoformat(
             timespec="seconds").replace("+00:00", "Z")
         for abbr, rows in forms.items():
             payload = {
                 "team_abbr": abbr.upper(),
-                "team_name": abbr.upper(),
+                "team_name": names.get(abbr) or abbr.upper(),
                 "league_code": league,
                 "last_5_json": json.dumps(rows),
                 "last_updated": now_iso,

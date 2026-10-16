@@ -493,24 +493,37 @@ def compute_read(game, ratings_pair, market_rows, juice=None, form=None,
     }
 
 
-def resolve_form(game, forms):
+def resolve_form(game, forms, name_map=None):
     """Find home/away TeamForm rows by abbr through the alias map.
-    Returns {"home": row, "away": row} with possibly-None sides, or None."""
+    Game rows may carry display NAMES instead of abbrs (NBA worker rows);
+    name_map ({league_lower: {canon(name): abbr}} from espn.teams_map)
+    resolves them. Returns {"home": row, "away": row}, None sides possible,
+    or None."""
     if not forms:
         return None
-    league = str(game.get("league_code") or game.get("sport") or "").upper()
+    league_raw = str(game.get("league_code") or game.get("sport") or "")
+    league = league_raw.upper()
+    lg_map = (name_map or {}).get(league_raw.lower()) or {}
     out = {}
     for side in ("home", "away"):
         val = game.get(f"{side}_team") or game.get(f"{side}_team_name")
         target = matching.canon(val, league) if val else None
+        if target and lg_map:
+            target = lg_map.get(target, target)
         hit = None
         for f in forms:
             fl = str(f.get("league_code") or "").upper()
             if fl and fl != league:
                 continue
-            fa = matching.canon(f.get("team_abbr") or f.get("team_name") or "", league)
-            if fa and fa == target:
-                hit = f
+            # match on abbr first, then on the full team name: worker Game
+            # rows for NBA carry display NAMES, not abbrs (fixed Oct 16
+            # 2026 — name-only games were starving every form input)
+            for fval in (f.get("team_abbr"), f.get("team_name")):
+                fa = matching.canon(fval or "", league) if fval else None
+                if fa and fa == target:
+                    hit = f
+                    break
+            if hit:
                 break
         out[side] = hit
     return out

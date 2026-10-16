@@ -86,6 +86,20 @@ def run(dry=None):
         except Exception as e:
             log("form", f"TeamForm refresh failed (non-fatal): {e}")
     forms = client.list_all("TeamForm")
+
+    # name->abbr map per league: NBA Game rows carry display names while
+    # TeamForm rows carry abbrs — without this join every form input
+    # starves and totals read as the market anchor (fixed Oct 16 2026)
+    name_map = {}
+    for _lg in [l for l in config.LEAGUES if l in config.ESPN_LEAGUES]:
+        try:
+            _tm = espn.teams_map(_lg)
+            if _tm:
+                name_map[_lg] = _tm
+        except Exception as e:
+            log("form", f"teams_map {_lg} failed (non-fatal): {e}")
+    log("form", f"name->abbr maps: "
+        + ", ".join(f"{k}:{len(v)}" for k, v in name_map.items()))
     existing_reads = client.list_all("MarketNovaRead", fields=[
         "id", "game_id", "market_type", "is_current", "status",
         "marketnova_true_line", "raw_edge", "what_the_book_is_doing", "one_line_read", "thesis_json",
@@ -394,7 +408,7 @@ def run(dry=None):
         # ---- analysis versioning (doctrine 34/79): immutable read chains.
         # input_hash fingerprints the MATERIAL inputs; quiet cycles keep
         # the prior version; material changes mint v+1 with supersedes.
-        _frm = reads.resolve_form(g, forms)
+        _frm = reads.resolve_form(g, forms, name_map=name_map)
         _pre_hash = versioning.input_fingerprint(
             g, pair, markets, juice=juice_by_game.get(g["id"]), form=_frm,
             movement=enrich.movement_context(rows),

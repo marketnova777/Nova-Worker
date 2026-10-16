@@ -114,6 +114,29 @@ def normalize_status(status, status_detail):
     return "scheduled"
 
 
+def teams_map(league):
+    """{canon(name): abbr} for a league from the ESPN team list.
+    Covers display + short display names. Returns {} on failure."""
+    out = {}
+    try:
+        data = fetch_json(f"{config.ESPN_BASE}/"
+                          f"{config.ESPN_LEAGUES[league]}/teams?limit=500")
+    except Exception:
+        return out
+    for wrapped in ((data.get("sports") or [{}])[0]
+                    .get("leagues", [{}])[0].get("teams", [])):
+        t = wrapped.get("team", wrapped)
+        abbr = t.get("abbreviation")
+        if not abbr:
+            continue
+        for key in ("displayName", "shortDisplayName", "name"):
+            v = t.get(key)
+            if v:
+                from nova import matching
+                out[matching.canon(v, league)] = abbr.upper()
+    return out
+
+
 def collect_events(league, days):
     from datetime import timedelta
     events = []
