@@ -72,8 +72,12 @@ def enqueue(client, task_type, game_id, prompt, log=lambda *a: None):
             "dedupe_key": key,
             "consumed": False,
         })
-        log(f"queued {key} ({len(prompt)} chars)")
-        return made.get("id") if isinstance(made, dict) else None
+        if isinstance(made, dict) and made.get("id"):
+            log(f"queued {key} ({len(prompt)} chars)")
+            return made["id"]
+        log(f"enqueue FAILED for {key} (create rejected) — "
+            "check entity create permissions")
+        return None
     except Exception as e:
         log(f"enqueue failed for {key} (non-fatal): {str(e)[:150]}")
         return None
