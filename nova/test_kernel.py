@@ -990,6 +990,27 @@ check("synthesis: list injury_details still works (back-compat)",
       len(_ctx_list["injury_details"]) == 14)
 
 
+
+
+# ===========================================================================
+# READ LIFECYCLE (postgame leftover regression, Oct 16 2026)
+# ===========================================================================
+from nova import cycle as _cyc
+_ret, _kept = _cyc.supersede_finals(
+    [{"id": "g1", "status": "final"},
+     {"id": "g2", "status": "scheduled"},
+     {"id": "g3", "status": "postponed"},
+     {"id": "g4", "status": "final"}],
+    {"g1": {"id": "r1"}, "g2": {"id": "r2"},
+     "g3": {"id": "r3"}, "g4": {"id": "r4"}})
+check("lifecycle: final + postponed reads retired, live read kept",
+      _ret == ["r1", "r3", "r4"] and list(_kept) == ["g2"])
+_ret2, _kept2 = _cyc.supersede_finals([{"id": "g1", "status": "scheduled"}],
+                                      {"g1": {"id": "r1"}})
+check("lifecycle: scheduled games untouched",
+      _ret2 == [] and _kept2 == {"g1": {"id": "r1"}})
+
+
 print()
 print("=" * 78)
 print(f"RESULT: {PASS} passed, {FAIL} failed")

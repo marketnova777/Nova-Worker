@@ -265,6 +265,13 @@ def run(dry=None):
         seen_read_games.add(gid)
         current_reads[gid] = r
 
+    # ---- lifecycle: retire reads on FINAL/terminal games (postgame
+    # leftovers never stay on the live board; grades keep the data) ----
+    retired_ids, current_reads = supersede_finals(games, current_reads)
+    stale_read_ids.extend(retired_ids)
+    if retired_ids:
+        log("read", f"{len(retired_ids)} postgame reads superseded (final games)")
+
     # ---------- live research (MODE 2; OpenAI web_search, optional) ------
     # Runs BEFORE read building so findings ride this cycle's answer packs.
     # Research never touches lines/edges: it informs context only.
@@ -799,6 +806,23 @@ def run(dry=None):
                   f"({n_man} attached dups left for manual merge)")
     except Exception as e:
         log("janitor", f"sweep failed (non-fatal): {e}")
+
+
+
+def supersede_finals(games, current_reads, terminal=("final",) + tuple(config.TERMINAL_EXEMPT)):
+    """Lifecycle rule: a read on a FINAL/terminal game is superseded the
+    cycle after the game ends. Grades keep the full read record
+    (final_read_json), but is_current=false so the board, top-edges and
+    novaChat only ever serve the live slate. Returns (ids_to_retire,
+    cleaned_current_reads)."""
+    terminal_ids = {g.get("id") for g in games
+                    if str(g.get("status") or "").lower() in terminal}
+    retire, cleaned = [], dict(current_reads)
+    for gid, r in list(cleaned.items()):
+        if gid in terminal_ids:
+            retire.append(r["id"])
+            del cleaned[gid]
+    return retire, cleaned
 
 
 def write_plan(client, league_plans, game_updates, read_patches, stale_read_ids=()):
