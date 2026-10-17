@@ -282,6 +282,14 @@ def run(dry=None):
                 injury_count[g["id"]] = injury_count.get(g["id"], 0) + 1
     log("enrich", f"weather rows for {len(weather_by_game)} outdoor games, "
           f"{len(injury_upserts)} injury rows")
+    # ---- taxonomy sweep: the legacy app-side automation still writes
+    # v14 reads (DATA_PENDING, NUMBER_GONE, ...). One-writer doctrine:
+    # only V3-taxonomy reads may stay current; foreign statuses are
+    # superseded every cycle (record kept, is_current=false). ----
+    _V3 = {"PLAY", "LEAN", "MONITOR", "PASS", "NUMBER GONE", "AWAITING DATA"}
+    for r in existing_reads:
+        if r.get("is_current") and str(r.get("status") or "").strip().upper() not in _V3:
+            stale_read_ids.append(r["id"])
     current_alt = {}      # (game_id, market_type) -> current total/ML read
     for r in existing_reads:
         if not r.get("is_current"):

@@ -62,7 +62,12 @@ TOTAL_MIN_SAMPLE = 3          # games per side to use the form model
 TOTAL_BLEND_CAP = 4.0         # max |true - market| the blend can produce
 
 STATUS_MAP = {"PASS": "PASS", "MONITOR": "MONITOR", "LEAN": "LEAN",
-              "PLAY": "PLAY", "STRONG_DISCREPANCY": "PLAY"}
+              "PLAY": "PLAY", "STRONG_DISCREPANCY": "PLAY",
+              # kernel gate statuses must land in the V3 taxonomy too
+              "NO_MODEL": "AWAITING DATA",
+              "INFORMATION_INCOMPLETE": "AWAITING DATA",
+              "REPRICE_REQUIRED": "AWAITING DATA",
+              "AWAITING DATA": "AWAITING DATA"}
 STATUS_RANK = {"PASS": 0, "MONITOR": 1, "LEAN": 2, "PLAY": 3}
 
 # fair-probability band where the normal margin model is trusted to
