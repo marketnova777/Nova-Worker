@@ -1004,7 +1004,17 @@ def run(dry=None):
                                      odds_ids, log=lambda m: log("janitor", m))
         if n_del or n_man:
             log("janitor", f"swept {n_del} duplicate games "
-                  f"({n_man} attached dups left for manual merge)")
+                  f"({n_man} attached dups left for merge)")
+        # attached dups: merge children into the canonical, then delete
+        try:
+            m_g, m_d, m_r, m_s = janitor.merge_duplicates(
+                client, fresh_games, log=lambda m: log("janitor", m))
+            if m_g:
+                log("janitor", f"merged {m_g} duplicate groups: "
+                      f"{m_d} games deleted, {m_r} children repointed, "
+                      f"{m_s} duplicate currents superseded")
+        except Exception as e:
+            log("janitor", f"merge failed (non-fatal): {e}")
     except Exception as e:
         log("janitor", f"sweep failed (non-fatal): {e}")
 

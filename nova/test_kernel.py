@@ -1216,6 +1216,64 @@ _frm_res5 = reads.resolve_form(
 check("resolve_form: short display names resolve too",
       _frm_res5 and _frm_res5.get("home", {}).get("team_abbr") == "OKC")
 
+# --- janitor: attached-dup merge (canonical keeps children) ---
+import importlib as _il
+_j = _il.import_module("nova.janitor")
+
+class _MergeClient:
+    """Fake client recording bulk puts/deletes."""
+    def __init__(self):
+        self.puts, self.deletes = [], []
+    def list_all(self, entity, fields=None):
+        if entity == "OddsSnapshot":
+            return [{"id": "o1", "game_id": "dup1", "book": "DK",
+                      "market_type": "spread", "is_current": True,
+                      "created_date": "2026-10-16T20:00Z"},
+                     {"id": "o2", "game_id": "canon", "book": "DK",
+                      "market_type": "spread", "is_current": True,
+                      "created_date": "2026-10-16T21:00Z"}]
+        if entity == "MarketNovaRead":
+            return [{"id": "r1", "game_id": "dup1", "market_type": "spread",
+                      "is_current": True, "updated_date": "2026-10-16T20:00Z"},
+                     {"id": "r2", "game_id": "canon", "market_type": "spread",
+                      "is_current": True, "updated_date": "2026-10-16T21:00Z"}]
+        return []
+    def bulk_put(self, entity, puts):
+        for rid, patch in puts:
+            self.puts.append((entity, {"id": rid, **patch}))
+        return len(puts)
+    def delete(self, entity, rid):
+        self.deletes.append((entity, rid))
+
+_mg_games = [
+    {"id": "canon", "league_code": "ncaaf", "game_date": "2026-10-17",
+     "start_time": "2026-10-18T03:00Z", "home_team": "Oregon Ducks",
+     "away_team": "Nebraska Cornhuskers", "provider_game_id": "401858492",
+     "created_date": "2026-10-15T00:24Z"},
+    {"id": "dup1", "league_code": "ncaaf", "game_date": "2026-10-17",
+     "start_time": "2026-10-18T03:00Z", "home_team": "Oregon Ducks",
+     "away_team": "Nebraska Cornhuskers", "provider_game_id": None,
+     "created_date": "2026-10-16T20:27Z"},
+]
+_mc = _MergeClient()
+_ng, _nd, _nr, _ns = _j.merge_duplicates(_mc, _mg_games, log=lambda m: None)
+check("janitor merge: canonical chosen, dup deleted",
+      _nd == 1 and ("Game", "dup1") in _mc.deletes)
+check("janitor merge: odds+read repointed to canonical",
+      ("OddsSnapshot", {"id": "o1", "game_id": "canon"}) in _mc.puts
+      and ("MarketNovaRead", {"id": "r1", "game_id": "canon"}) in _mc.puts)
+check("janitor merge: duplicate currents superseded (2 read-currents -> 1)",
+      ("MarketNovaRead", {"id": "r1", "is_current": False}) in _mc.puts)
+
+class _FailingClient(_MergeClient):
+    def bulk_put(self, entity, puts):
+        return 0   # repoint fails entirely
+
+_fc = _FailingClient()
+_fg, _fd, _fr, _fs = _j.merge_duplicates(_fc, _mg_games, log=lambda m: None)
+check("janitor merge: failed repoint -> dup game KEPT (no orphaning)",
+      _fd == 0 and len(_fc.deletes) == 0)
+
 # --- forms: ESPN scoreboard abbr -> official abbr translation ---
 _f_games = [{
     "start_time": "2026-10-10T00:00Z", "status": "STATUS_FINAL",
