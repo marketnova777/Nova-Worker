@@ -671,7 +671,9 @@ def run(dry=None):
         for mtype in ("total", "moneyline"):
             try:
                 if mtype == "total":
-                    res = mktreads.compute_total_read(g, _frm, markets)
+                    res = mktreads.compute_total_read(
+                        g, _frm, markets, weather=weather_by_game.get(g["id"]),
+                        injury_details=inj_details)
                 else:
                     if result.get("status") == "AWAITING DATA":
                         continue      # no honest true spread -> no ML read

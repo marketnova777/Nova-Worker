@@ -90,3 +90,21 @@ STATUS_TAXONOMY = ["PLAY", "LEAN", "MONITOR", "PASS", "NUMBER GONE", "AWAITING D
 
 # Edge sanity gate: |edge| never > 8 points vs true line (hard product rule).
 MAX_EDGE_POINTS = 8.0
+
+# ---- True-line game-reality construction weights (nova/trueline.py) ----
+# Personnel: raw ESPN impact points per side -> spread points. Cap total.
+TRUELINE_INJURY_SCALE = 0.35      # impact points -> spread points
+TRUELINE_INJURY_CAP = 2.5         # max spread adjustment from personnel
+TRUELINE_INJURY_SIDE_CAP = 8.0    # raw impact ceiling per side (IR stashes)
+TRUELINE_QB_TOTAL_POINTS = 1.5    # total points off per OUT QB (football)
+TRUELINE_QB_TOTAL_CAP = 2.5
+# Schedule: rest advantage beyond a ±1-day deadband.
+TRUELINE_REST_SCALE = 0.30        # spread points per rest day beyond deadband
+TRUELINE_REST_CAP = 1.0
+TRUELINE_REST_CAP_B2B = 1.3       # nba/nhl back-to-back case
+# Form: last-5 margin differential — small weight, markets price streaks.
+TRUELINE_FORM_SCALE = 0.12
+TRUELINE_FORM_CAP = 1.5
+TRUELINE_FORM_MIN_GAMES = 3
+# Environment (totals only).
+TRUELINE_WEATHER_TOTAL_MIN = -3.0

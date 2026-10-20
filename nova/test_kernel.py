@@ -1361,6 +1361,131 @@ _r_set2 = list(_r_set) + [_rating("r8", "nba", "PHO", "Phoenix Suns")]
 _cl4 = _SweepClient([], [], _r_set2)
 n = _j.ensure_rating_aliases(_cl4, log=lambda m: None)
 check("janitor ratings: existing alias not duplicated", n == 5)
+# ============================================================
+# True-line game-reality construction (nova/trueline.py)
+# ============================================================
+import os as _os2, json as _tj
+from datetime import datetime, timedelta, timezone
+sys.path.insert(0, _os2.path.dirname(_os2.path.dirname(_os2.path.abspath(__file__))))
+from nova import trueline as _tl
+from nova import config as tconfig
+
+_inj = {"home": [{"player_name": "H1", "position": "QB", "status": "Out", "impact_rating": 4.0}],
+        "away": [{"player_name": "A1", "position": "WR", "status": "Questionable", "impact_rating": 4.0}]}
+_d, _b = _tl.injury_delta(_inj, "nfl")
+check("trueline: home QB out -> negative home delta (home weaker)",
+      _d < 0, f"delta={_d}")
+check("trueline: QB gets position weight above raw impact",
+      _b["home_impact"] > 4.0, f"home_impact={_b['home_impact']}")
+check("trueline: questionable discounted 65%",
+      abs(_b["away_impact"] - 4.0 * 0.35) < 0.01, f"away_impact={_b['away_impact']}")
+
+_huge = {"home": [{"position": "WR", "status": "Out For Season", "impact_rating": 5.0}] * 20,
+         "away": []}
+_d2, _ = _tl.injury_delta(_huge, "nfl")
+check("trueline: injury delta capped at TRUELINE_INJURY_CAP",
+      _d2 == -tconfig.TRUELINE_INJURY_CAP, f"delta={_d2}")
+_d3, _b3 = _tl.injury_delta({"home": [], "away": []}, "nfl")
+check("trueline: empty injury book -> zero delta, fail-open",
+      _d3 == 0.0 and _b3["delta"] == 0.0)
+_d4, _ = _tl.injury_delta(None, "nfl")
+check("trueline: None injury details -> zero delta", _d4 == 0.0)
+
+_qbt, _ = _tl.injury_total_delta(_inj, "nfl")
+check("trueline: OUT QB lowers the football total",
+      _qbt == -tconfig.TRUELINE_QB_TOTAL_POINTS, f"delta={_qbt}")
+_qbt2, _ = _tl.injury_total_delta(_inj, "nba")
+check("trueline: QB total effect football-only", _qbt2 == 0.0)
+
+_rd, _rb = _tl.rest_delta({"home": 7, "away": 2}, "nfl")
+check("trueline: 5-day rest edge -> positive home delta",
+      0 < _rd <= tconfig.TRUELINE_REST_CAP, f"delta={_rd}")
+_rd0, _ = _tl.rest_delta({"home": 3, "away": 3}, "nfl")
+check("trueline: normal rest deadband -> zero", _rd0 == 0.0)
+_rdb, _ = _tl.rest_delta({"home": 1, "away": 0}, "nba")
+check("trueline: nba back-to-back skips deadband (fatigue priced)",
+      _rdb != 0.0, f"delta={_rdb}")
+check("trueline: nba B2B delta points at the rested side",
+      _rdb > 0, f"home rested 1 vs away 0 -> {_rdb}")
+_rdn, _ = _tl.rest_delta({"home": None, "away": 4}, "nfl")
+check("trueline: missing rest data -> zero, fail-open", _rdn == 0.0)
+
+_frm = {"home": {"last_5_json": _tj.dumps([{"score": 35, "opponent_score": 10}] * 5)},
+        "away": {"last_5_json": _tj.dumps([{"score": 10, "opponent_score": 35}] * 5)}}
+_fd, _fb = _tl.form_delta(_frm)
+check("trueline: form differential -> small positive home delta",
+      0 < _fd <= tconfig.TRUELINE_FORM_CAP, f"delta={_fd}")
+_fd2, _ = _tl.form_delta({"home": {"last_5_json": _tj.dumps([{"score": 1, "opponent_score": 0}])}, "away": None})
+check("trueline: under 3-game minimum -> zero, fail-open", _fd2 == 0.0)
+
+_wx, _wxb = _tl.weather_total_delta({"wind_speed_mph": 28, "precipitation_pct": 70, "temp_f": 95})
+check("trueline: heavy weather lowers total but respects floor",
+      _wx >= tconfig.TRUELINE_WEATHER_TOTAL_MIN and _wx < 0, f"delta={_wx}")
+_wx0, _ = _tl.weather_total_delta({"wind_speed_mph": 5, "precipitation_pct": 10, "temp_f": 70})
+check("trueline: calm weather -> zero total delta", _wx0 == 0.0)
+_wx2, _ = _tl.weather_total_delta(None)
+check("trueline: no weather payload -> zero, fail-open", _wx2 == 0.0)
+
+_con = _tl.construction("nfl", form=_frm, rest={"home": 4, "away": 1},
+                        injury_details=_inj,
+                        weather={"wind_speed_mph": 22, "precipitation_pct": 5, "temp_f": 55})
+check("trueline: full construction journals every active module",
+      set(_con["breakdown"]["active_modules"]) >= {"injury", "rest", "form", "weather"},
+      f"active={_con['breakdown']['active_modules']}")
+check("trueline: spread stack equals sum of spread deltas (rounding tolerance)",
+      abs(_con["spread_delta"] - (_con["injury_delta"] + _con["rest_delta"] + _con["form_delta"])) < 0.005,
+      f"stack={_con['spread_delta']}")
+
+_tp = build_true_price(team_power_gap=3.0, expected_pace_points=45.0, home_field=2.5,
+                       injury_delta=-1.0, schedule_delta=0.5, form_delta=0.3,
+                       weather_delta=-2.0)
+check("kernel: build_true_price applies all construction deltas",
+      _tp.spread == -(3.0 + 2.5 - 1.0 + 0.5 + 0.3) and _tp.total == 43.0,
+      f"spread={_tp.spread} total={_tp.total}")
+_tp0 = build_true_price(team_power_gap=3.0, expected_pace_points=45.0, home_field=2.5)
+check("kernel: build_true_price defaults unchanged (backward compat)",
+      _tp0.spread == -5.5 and _tp0.total == 45.0)
+
+# end-to-end: compute_read carries the construction journal on telemetry
+from reads import compute_read as _cr
+_rg = {"league_code": "NFL", "sport": "NFL", "home_team": "Rams", "away_team": "Bears",
+       "start_time": (datetime.now(timezone.utc) + timedelta(hours=30)).isoformat()}
+_pair = {"home": {"rating": 3.0}, "away": {"rating": 0.0}}
+_mk = {"spread": {"market_line": -1.0, "book": "draftkings"}}
+_resh = _cr(_rg, _pair, _mk, form=_frm, rest={"home": 4, "away": 1},
+            injuries=2, injury_details=_inj,
+            weather={"wind_speed_mph": 22, "precipitation_pct": 5, "temp_f": 55,
+                     "weather_read": "wind-impacted"})
+check("reads: telemetry carries construction breakdown",
+      isinstance(_resh.get("telemetry", {}).get("construction"), dict)
+      and "spread_stack" in _resh["telemetry"]["construction"])
+check("reads: constructed true line differs from ratings-only baseline",
+      _resh["true_line"] != -(3.0 + 2.5), f"true={_resh['true_line']}")
+
+# ============================================================
+# Total-read environment pricing (markets.compute_total_read)
+# ============================================================
+from markets import compute_total_read as _ctr
+_tg = {"league_code": "NFL", "sport": "NFL", "home_team": "Rams", "away_team": "Bears",
+       "start_time": (datetime.now(timezone.utc) + timedelta(hours=30)).isoformat()}
+_tmkt = {"total": {"market_line": 44.5, "book": "dk", "over_price": -110, "under_price": -110}}
+_tform = {"home": {"last_5_json": _tj.dumps([{"score": 24, "opponent_score": 20}] * 5)},
+          "away": {"last_5_json": _tj.dumps([{"score": 23, "opponent_score": 21}] * 5)}}
+_tbase = _ctr(_tg, _tform, _tmkt)
+_twind = _ctr(_tg, _tform, _tmkt, weather={"wind_speed_mph": 26, "precipitation_pct": 30, "temp_f": 48})
+_tqb = _ctr(_tg, _tform, _tmkt, injury_details={"home": [{"position": "QB", "status": "Out", "impact_rating": 4.0}], "away": []})
+check("total read: heavy wind lowers the fair total",
+      _twind["true_line"] < _tbase["true_line"],
+      f"base={_tbase['true_line']} windy={_twind['true_line']}")
+check("total read: OUT QB lowers the fair total",
+      _tqb["true_line"] < _tbase["true_line"],
+      f"base={_tbase['true_line']} qbout={_tqb['true_line']}")
+check("total read: environment journals into telemetry",
+      isinstance(_twind["telemetry"].get("environment"), dict)
+      and _twind["telemetry"]["environment"]["env_delta"] < 0)
+check("total read: no weather/injuries -> identical to baseline",
+      _ctr(_tg, _tform, _tmkt)["true_line"] == _tbase["true_line"])
+
 print()
 print("=" * 78)
 print(f"RESULT: {PASS} passed, {FAIL} failed")

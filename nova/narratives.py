@@ -84,10 +84,22 @@ def build_true_line_basis(game, result, ctx):
     inj = ctx.get("injury_details") or {}
     ih = len(inj.get("home") or [])
     ia = len(inj.get("away") or [])
+    con = ctx.get("construction") or {}
+    mods = con.get("active_modules") or []
     if ih or ia:
+        priced = " — priced into the line" if "injury" in mods else \
+                 " (flagged in the personnel layer, priced at zero impact)"
         parts.append(f"injury book: {ih} {IHWORD(ih)} on the home side, "
-                     f"{ia} {IHWORD(ia)} on the road side (flagged in the "
-                     "personnel layer, not double-counted in the line)")
+                     f"{ia} {IHWORD(ia)} on the road side{priced}")
+    stack = []
+    if con.get("rest") and (con["rest"] or {}).get("delta"):
+        stack.append(f"schedule {con['rest']['delta']:+.1f}")
+    if con.get("form") and (con["form"] or {}).get("delta"):
+        stack.append(f"recent form {con['form']['delta']:+.1f}")
+    if con.get("weather") and (con["weather"] or {}).get("delta"):
+        stack.append(f"environment {con['weather']['delta']:+.1f} on the total")
+    if stack:
+        parts.append("game-reality adjustments: " + ", ".join(stack))
     w = ctx.get("weather")
     if w and w.get("weather_read"):
         parts.append(f"environment: {str(w.get('weather_read')).lower()}")

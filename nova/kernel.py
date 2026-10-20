@@ -227,10 +227,17 @@ def build_true_price(team_power_gap: float, expected_pace_points: float, **adjus
     """
     Independent construction (section 3). team_power_gap: positive = home stronger.
     expected_pace_points: neutral-environment combined expected score.
-    adjustments: home_field, weather_delta, injury_delta (points).
+    adjustments (home-strength-positive, all default 0):
+        home_field      — sport-aware home advantage
+        injury_delta    — personnel impact (nova/trueline.py)
+        schedule_delta  — rest/schedule advantage
+        form_delta      — last-5 recency corrector (small weight)
+        weather_delta   — environment priced on the TOTAL
     """
     spread = -(team_power_gap + adjustments.get("home_field", 2.5)
-               + adjustments.get("injury_delta", 0.0))
+               + adjustments.get("injury_delta", 0.0)
+               + adjustments.get("schedule_delta", 0.0)
+               + adjustments.get("form_delta", 0.0))
     total = expected_pace_points + adjustments.get("weather_delta", 0.0)
     half = total / 2.0
     margin = -spread

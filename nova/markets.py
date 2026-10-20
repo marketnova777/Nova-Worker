@@ -24,7 +24,7 @@ Every read ends in the standard taxonomy. No forced plays.
 import math
 from statistics import NormalDist
 
-from nova import config, kernel
+from nova import config, kernel, trueline
 
 _NORMAL = NormalDist()
 
@@ -138,7 +138,8 @@ def _form_scoring(form_row):
     return scored / n, allowed / n, n
 
 
-def compute_total_read(game, form, market_rows):
+def compute_total_read(game, form, market_rows, weather=None,
+                       injury_details=None):
     """Build the TOTAL read result dict, or None when no total price
     exists (nothing to compare -> no record; same contract as spreads)."""
     total_row = (market_rows or {}).get("total")
@@ -165,6 +166,20 @@ def compute_total_read(game, form, market_rows):
         basis = (f"{TOTAL_MARKET_WEIGHT:.0%} market anchor / "
                  f"{1 - TOTAL_MARKET_WEIGHT:.0%} recent-form pace "
                  f"({h[2]}-game samples, blend capped at {TOTAL_BLEND_CAP:.0f} pts)")
+
+    # game-reality construction (nova/trueline.py): environment + missing-QB
+    # effects priced on the TOTAL — bounded, journaled, fail-open
+    wx_d, wx_b = trueline.weather_total_delta(weather)
+    inj_tot, inj_b = trueline.injury_total_delta(injury_details, league_l)
+    env_delta = (wx_d or 0.0) + (inj_tot or 0.0)
+    if env_delta:
+        true_total = round(true_total + env_delta, 1)
+        env_bits = []
+        if wx_b and wx_b.get("notes"):
+            env_bits.append("; ".join(wx_b["notes"]))
+        if inj_b:
+            env_bits.append(f"{inj_b['out_qbs']} OUT QB(s)")
+        basis += f"; environment {env_delta:+.1f} ({', '.join(env_bits)})"
 
     raw_edge = round(abs(market_total - true_total), 2)
     if raw_edge > config.MAX_EDGE_POINTS:
@@ -248,13 +263,16 @@ def compute_total_read(game, form, market_rows):
              f"{raw_edge:.1f} pts of {direction} lean.")
             + (f" Juice costs {vig_penalty:.1f} of it." if vig_penalty else "")),
         "risk": ("Five-game scoring samples are noisy; the blend is capped at "
-                 f"{TOTAL_BLEND_CAP:.0f} points for exactly that reason. Weather and "
-                 "pace-shaping personnel news are NOT modeled in this read."),
+                 f"{TOTAL_BLEND_CAP:.0f} points for exactly that reason. Environment "
+                 "adjustments are capped on the total; unmodeled pace-shifting "
+                 "personnel news (late scratches) can still move the game."),
         "telemetry": {
             "market": "total", "value_side": value_side,
             "vig_penalty": vig_penalty, "effective_edge": effective_edge,
             "hours_to_close": hours, "stage": stage,
             "model_basis": basis,
+            "environment": {"weather": wx_b, "personnel_total": inj_b,
+                            "env_delta": round(env_delta, 2)},
         },
     }
 

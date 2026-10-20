@@ -23,7 +23,7 @@ import json
 from datetime import datetime, timezone
 
 from nova import config, matching
-from nova import kernel, narratives
+from nova import kernel, narratives, trueline
 
 # Sport-aware home-field advantage (points), applied inside build_true_price.
 HOME_FIELD = {"nfl": 2.5, "ncaaf": 2.5, "nba": 2.3, "ncaab": 3.0,
@@ -147,10 +147,20 @@ def compute_read(game, ratings_pair, market_rows, juice=None, form=None,
     line = float(market["market_line"])  # home-perspective (negative = home favored)
     expected_total = _expected_total(market_rows, league_l)
 
+    # Game-reality construction (founder spec: the true line is built from
+    # MANY variables, not ratings alone). Bounded, fail-open adjustments —
+    # injuries, rest/schedule, recent form, environment — journaled in the
+    # read telemetry so the construction is always inspectable.
+    con = trueline.construction(league_l, form=form, rest=rest,
+                                injury_details=injury_details, weather=weather)
     tp = kernel.build_true_price(
         team_power_gap=gap,
         expected_pace_points=expected_total,
-        home_field=HOME_FIELD.get(league_l, 2.0))
+        home_field=HOME_FIELD.get(league_l, 2.0),
+        injury_delta=con["injury_delta"],
+        schedule_delta=con["rest_delta"],
+        form_delta=con["form_delta"],
+        weather_delta=con["weather_delta"])
 
     # MODE 2 synthesis input (nova/synthesis.py): a validated fair range
     # from the deep-analysis layer replaces the ratings baseline for THIS
@@ -341,7 +351,8 @@ def compute_read(game, ratings_pair, market_rows, juice=None, form=None,
     except (ValueError, TypeError):
         pass
     market_psychology = (
-        f"The book is posting {line:+.1f} while Nova's independent ratings put fair at "
+        f"The book is posting {line:+.1f} while Nova's constructed true line — "
+        f"ratings plus personnel, schedule and form adjustments — puts fair at "
         f"{true_line:+.1f}. The gap most likely reflects ratings lag and market anchoring "
         f"to recent results rather than informed positioning.")
 
@@ -428,6 +439,7 @@ def compute_read(game, ratings_pair, market_rows, juice=None, form=None,
         "ratings_pair": ratings_pair, "movement": movement, "form": form,
         "weather": weather, "juice": juice, "tape": tape,
         "injury_details": injury_details, "band": 1.0,
+        "construction": con["breakdown"],
     }
     narrative = {}
     try:
@@ -489,6 +501,7 @@ def compute_read(game, ratings_pair, market_rows, juice=None, form=None,
             "streak": streak_ctx,               # momentum context only — never conviction
             "recency_anchor": recency_anchor,   # blowout in the last game: bettors anchor, market prices it
             "synthesis": synth_note,            # MODE 2 provenance: accepted/rejected + why
+            "construction": con["breakdown"],  # game-reality stack: how the true line was built
         },
     }
 
