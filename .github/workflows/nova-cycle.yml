@@ -5,7 +5,10 @@ name: Nova cycle
 # stays well inside free Actions minutes.
 on:
   schedule:
-    - cron: "*/30 * * * *"
+    # every 15 min — GitHub free-tier scheduling delays/drops single-cron
+    # schedules unpredictably (observed 40-90 min gaps); the gate step skips
+    # dead slates in ~10s so extra fires are cheap and coverage stays dense
+    - cron: "*/15 * * * *"
   workflow_dispatch: {}
 
 concurrency:
