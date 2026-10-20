@@ -228,3 +228,113 @@ def merge_duplicates(client, games, log=print):
         log(f"merge: {key[0]} {key[3]} @ {key[2]} -> canonical "
             f"{ordered[0]['id']} (kept), merged {len(losers)} copy(ies)")
     return len(dup_groups), n_deleted, n_repointed, n_super
+
+
+# ------------------------------------------------------------------
+# Data-level self-heal sweeps (run every cycle after the merge)
+
+FORMS_KEEP = 1          # keep the newest TeamForm row per (league, abbr)
+
+def dedupe_forms(client, log=print):
+    """Legacy backfills left duplicate TeamForm rows per (league, abbr).
+    Keep the newest row of each group, delete the rest."""
+    from collections import defaultdict
+    forms = client.list_all("TeamForm", fields=["id", "league_code",
+                                                "team_abbr", "updated_date",
+                                                "created_date"])
+    key = defaultdict(list)
+    for f in forms:
+        k = (str(f.get("league_code") or "").lower(),
+             str(f.get("team_abbr") or "").upper())
+        key[k].append(f)
+    doomed = []
+    for grp in key.values():
+        if len(grp) > FORMS_KEEP:
+            grp.sort(key=lambda f: str(f.get("updated_date")
+                                       or f.get("created_date") or ""), reverse=True)
+            doomed += [f["id"] for f in grp[FORMS_KEEP:]]
+    if doomed:
+        _delete_ids(client, "TeamForm", doomed)
+        log(f"forms dedupe: deleted {len(doomed)} duplicate TeamForm rows")
+    return len(doomed)
+
+
+def dedupe_current_odds(client, log=print):
+    """Multiple odds writers leave 2+ is_current rows per (game, book,
+    market). Keep the newest snapshot, supersede the rest (is_current
+    false — history preserved, never deleted)."""
+    from collections import defaultdict
+    odds = client.list_all("OddsSnapshot", fields=["id", "game_id", "book",
+                                                   "market_type", "is_current",
+                                                   "snapshot_time", "updated_date"])
+    grp = defaultdict(list)
+    for o in odds:
+        if not o.get("is_current") or not o.get("game_id"):
+            continue
+        grp[(o["game_id"], str(o.get("book")), str(o.get("market_type")))].append(o)
+    superseded, keep = [], {}
+    for rows in grp.values():
+        if len(rows) < 2:
+            continue
+        rows.sort(key=lambda o: (str(o.get("snapshot_time") or ""),
+                                  str(o.get("updated_date") or "")), reverse=True)
+        keep_row = rows[0]
+        # never supersede the row we keep — write is_current=false on the rest
+        superseded += [(o["id"], False) for o in rows[1:]]
+        keep[keep_row["id"]] = True
+    if superseded:
+        try:
+            client.bulk_put("OddsSnapshot", [(rid, {"is_current": False})
+                                              for rid, _ in superseded])
+            log(f"odds dedupe: superseded {len(superseded)} duplicate current odds rows")
+        except Exception as e:
+            log(f"odds dedupe failed: {e}")
+    return len(superseded)
+
+
+# Game-league abbr -> TeamRating-league abbr aliases (frontend joins)
+RATING_ALIASES = {
+    ("nba", "SAS"): ("nba", "SA"), ("nba", "NYK"): ("nba", "NY"),
+    ("nba", "PHO"): ("nba", "PHX"), ("nba", "NOP"): ("nba", "NO"),
+    ("nba", "UTA"): ("nba", "UTAH"), ("nhl", "LAK"): ("nhl", "LA"),
+}
+
+def ensure_rating_aliases(client, log=print):
+    """Games carry ESPN abbrs (SAS/PHO/...); TeamRating uses its own
+    convention (SA/PHX/...). Frontends join by abbr, so mirror each
+    canonical rating row under the ESPN-style alias abbr."""
+    have = {}
+    for r in client.list_all("TeamRating"):
+        k = (str(r.get("league_code") or "").lower(),
+             str(r.get("team_abbr") or "").upper())
+        if k not in have:
+            have[k] = r
+    creates = []
+    for (lg, alias), (rlg, canon) in RATING_ALIASES.items():
+        src = have.get((rlg, canon)) or have.get((lg, canon))
+        if src and (lg, alias) not in have:
+            row = {k: v for k, v in src.items()
+                   if k not in ("id", "created_date", "updated_date", "created_by")}
+            row["team_abbr"] = alias
+            row["league_code"] = src.get("league_code")
+            creates.append(row)
+    if creates:
+        try:
+            client.bulk_create("TeamRating", creates)
+            log(f"ratings: created {len(creates)} alias rows "
+                f"({', '.join(c['team_abbr'] for c in creates)})")
+        except Exception as e:
+            log(f"ratings alias create failed: {e}")
+    return len(creates)
+
+
+def _delete_ids(client, entity, ids):
+    def _del(rid):
+        try:
+            client.delete(entity, rid)
+            return True
+        except Exception:
+            return False
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        results = list(ex.map(_del, ids))
+    return sum(results)

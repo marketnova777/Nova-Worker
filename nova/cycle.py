@@ -282,30 +282,51 @@ def run(dry=None):
                 injury_count[g["id"]] = injury_count.get(g["id"], 0) + 1
     log("enrich", f"weather rows for {len(weather_by_game)} outdoor games, "
           f"{len(injury_upserts)} injury rows")
-    # ---- taxonomy sweep: the legacy app-side automation still writes
-    # v14 reads (DATA_PENDING, NUMBER_GONE, ...). One-writer doctrine:
-    # only V3-taxonomy reads may stay current; foreign statuses are
-    # superseded every cycle (record kept, is_current=false). ----
+    # ---- foreign-writer sweep: one-writer doctrine. The legacy app-side
+    # v14 pipeline (writer_id=nova-deterministic-pipeline, analysis_version
+    # V14) still writes reads for the whole slate with null true lines.
+    # Its records are superseded every cycle regardless of status word;
+    # they are never loaded as patch targets (the writer mints its own
+    # records instead of patching foreign ones). ----
     _V3 = {"PLAY", "LEAN", "MONITOR", "PASS", "NUMBER GONE", "AWAITING DATA"}
-    for r in existing_reads:
-        if r.get("is_current") and str(r.get("status") or "").strip().upper() not in _V3:
-            stale_read_ids.append(r["id"])
-    current_alt = {}      # (game_id, market_type) -> current total/ML read
+    swept = set()
     for r in existing_reads:
         if not r.get("is_current"):
+            continue
+        foreign = (str(r.get("writer_id") or "") == "nova-deterministic-pipeline"
+                   or str(r.get("analysis_version") or "").upper() == "V14")
+        if foreign or str(r.get("status") or "").strip().upper() not in _V3:
+            stale_read_ids.append(r["id"])
+            swept.add(r["id"])
+    if swept:
+        log("read", f"foreign/v14 currents swept: {len(swept)}")
+    current_alt = {}      # (game_id, market_type) -> current total/ML read
+    for r in existing_reads:
+        if not r.get("is_current") or r["id"] in swept:
             continue
         mt = str(r.get("market_type", "")).lower()
         gid = r.get("game_id")
         if mt == "spread":
             if gid in seen_read_games:
-                stale_read_ids.append(r["id"])   # duplicate current read — heal
+                # duplicate current: keep the WORKER-authored record,
+                # supersede the foreign one (worker fields win the slot)
+                keep, drop = current_reads[gid], r
+                if str(r.get("writer_id") or "") != "nova-deterministic-pipeline" and str(r.get("analysis_version") or "").upper() != "V14":
+                    keep, drop = r, current_reads[gid]
+                stale_read_ids.append(drop["id"])
+                current_reads[gid] = keep
+                seen_read_games.add(gid)
                 continue
             seen_read_games.add(gid)
             current_reads[gid] = r
         elif mt in ("total", "moneyline"):
             key = (gid, mt)
             if key in current_alt:
-                stale_read_ids.append(r["id"])   # duplicate current alt read — heal
+                keep, drop = current_alt[key], r
+                if str(r.get("writer_id") or "") != "nova-deterministic-pipeline" and str(r.get("analysis_version") or "").upper() != "V14":
+                    keep, drop = r, current_alt[key]
+                stale_read_ids.append(drop["id"])
+                current_alt[key] = keep
                 continue
             current_alt[key] = r
 
@@ -540,7 +561,8 @@ def run(dry=None):
             richer = llm.narrate(g, result)
             if richer and all(richer):
                 doing, one_line = richer
-        desired_read = {
+        desired_read = {                "writer_id": "nova-worker-github",
+                "analysis_version": "V3",
             # league_code/sport are REQUIRED by the live MarketNovaRead
             # schema; patches ignore them (changed_fields uses its own list)
             "league_code": str(g.get("league_code") or g.get("sport") or "").upper(),
@@ -622,6 +644,7 @@ def run(dry=None):
             read_patches.append(("__create__", g["id"], "spread", desired_read))
         else:
             patch = changed_fields(cur, desired_read, [
+                "writer_id", "analysis_version",
                 "status", "marketnova_true_line", "raw_edge", "market_line",
                 "what_the_book_is_doing", "one_line_read",
                 # price-locked fields change in lockstep with the numbers —
@@ -662,7 +685,8 @@ def run(dry=None):
             if res.get("status") == "AWAITING DATA":
                 log("read", f"{mtype} read on {g.get('away_team')}@{g.get('home_team')}: "
                              f"AWAITING DATA ({res.get('reason', '')[:80]})")
-            desired_alt = {
+            desired_alt = {                "writer_id": "nova-worker-github",
+                "analysis_version": "V3",
                 "league_code": str(g.get("league_code") or g.get("sport") or "").upper(),
                 "sport": str(g.get("sport") or g.get("league_code") or "").upper(),
                 "status": res["status"],
@@ -702,6 +726,7 @@ def run(dry=None):
                 read_patches.append(("__create__", g["id"], mtype, desired_alt))
             else:
                 alt_patch = changed_fields(cur_alt_row, desired_alt, [
+                    "writer_id", "analysis_version",
                     "status", "marketnova_true_line", "raw_edge", "market_line",
                     "true_line_value", "fair_price", "edge_value", "edge_unit",
                     "edge_score_display", "edge_direction", "market_odds",
@@ -1023,6 +1048,19 @@ def run(dry=None):
                       f"{m_s} duplicate currents superseded")
         except Exception as e:
             log("janitor", f"merge failed (non-fatal): {e}")
+        # ---- data-level self-heal sweeps (idempotent, every cycle) ----
+        try:
+            janitor.dedupe_forms(client, log=lambda m: log("janitor", m))
+        except Exception as e:
+            log("janitor", f"forms dedupe failed (non-fatal): {e}")
+        try:
+            janitor.dedupe_current_odds(client, log=lambda m: log("janitor", m))
+        except Exception as e:
+            log("janitor", f"odds dedupe failed (non-fatal): {e}")
+        try:
+            janitor.ensure_rating_aliases(client, log=lambda m: log("janitor", m))
+        except Exception as e:
+            log("janitor", f"rating aliases failed (non-fatal): {e}")
     except Exception as e:
         log("janitor", f"sweep failed (non-fatal): {e}")
 

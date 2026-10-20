@@ -1296,6 +1296,71 @@ check("kernel: pregame_total threshold band present",
       _kn_mod.PRICE_THRESHOLDS["pregame_total"]["play_gte"] == 2.0)
 
 
+
+
+
+# --- janitor self-heal sweeps ---
+class _SweepClient:
+    def __init__(self, forms, odds, ratings):
+        self._f, self._o, self._r = forms, odds, ratings
+        self.deleted, self.puts, self.created = [], [], []
+    def list_all(self, entity, fields=None):
+        return {"TeamForm": self._f, "OddsSnapshot": self._o,
+                "TeamRating": self._r}[entity]
+    def delete(self, entity, rid):
+        self.deleted.append((entity, rid))
+    def bulk_put(self, entity, puts):
+        self.puts += [(entity, p) for p in puts]
+        return len(puts)
+    def bulk_create(self, entity, rows):
+        self.created += [(entity, r) for r in rows]
+        return len(rows)
+
+_f1 = {"id": "f1", "league_code": "ncaaf", "team_abbr": "APP",
+       "updated_date": "2026-10-17T00:06:00Z", "created_date": "2026-10-17T00:06:00Z"}
+_f2 = {"id": "f2", "league_code": "ncaaf", "team_abbr": "APP",
+       "updated_date": "2026-10-02T00:24:00Z", "created_date": "2026-10-02T00:24:00Z"}
+_f3 = {"id": "f3", "league_code": "NBA", "team_abbr": "NY",
+       "updated_date": "2026-10-01T00:00:00Z", "created_date": "2026-10-01T00:00:00Z"}
+_cl = _SweepClient([_f1, _f2, _f3], [], [])
+n = _j.dedupe_forms(_cl, log=lambda m: None)
+check("janitor forms dedupe: stale dup deleted, newest kept",
+      n == 1 and ("TeamForm", "f2") in _cl.deleted
+      and ("TeamForm", "f1") not in _cl.deleted)
+
+_o1 = {"id": "o1", "game_id": "g1", "book": "ESPN", "market_type": "spread",
+       "is_current": True, "snapshot_time": "2026-10-20T10:00:00Z"}
+_o2 = {"id": "o2", "game_id": "g1", "book": "ESPN", "market_type": "spread",
+       "is_current": True, "snapshot_time": "2026-10-20T14:00:00Z"}
+_o3 = {"id": "o3", "game_id": "g1", "book": "ESPN", "market_type": "total",
+       "is_current": True, "snapshot_time": "2026-10-20T14:00:00Z"}
+_cl2 = _SweepClient([], [_o1, _o2, _o3], [])
+n = _j.dedupe_current_odds(_cl2, log=lambda m: None)
+sup = {pid for e, (pid, v) in _cl2.puts if e == "OddsSnapshot"}
+check("janitor odds dedupe: newest kept, older superseded",
+      n == 1 and "o1" in sup and "o2" not in sup and "o3" not in sup)
+
+def _rating(aid, lg, abbr, name):
+    return {"id": aid, "league_code": lg, "team_abbr": abbr,
+            "team_name": name, "rating": 84.0, "created_date": "x"}
+_r_canon = _rating("r1", "nba", "PHX", "Phoenix Suns")
+_r_dup = _rating("r2", "nba", "PHX", "Phoenix Suns")
+_r_set = [_r_canon, _r_dup,
+          _rating("r3", "nba", "SA", "San Antonio Spurs"),
+          _rating("r4", "nba", "NY", "New York Knicks"),
+          _rating("r5", "nba", "NO", "New Orleans Pelicans"),
+          _rating("r6", "nba", "UTAH", "Utah Jazz"),
+          _rating("r7", "nhl", "LA", "Los Angeles Kings")]
+_cl3 = _SweepClient([], [], _r_set)
+n = _j.ensure_rating_aliases(_cl3, log=lambda m: None)
+abbrs = {r["team_abbr"] for e, r in _cl3.created if e == "TeamRating"}
+check("janitor ratings: PHO/UTA/NYK/SAS/NOP/LAK alias rows created",
+      n == 6 and abbrs == {"PHO", "UTA", "NYK", "SAS", "NOP", "LAK"})
+
+_r_set2 = list(_r_set) + [_rating("r8", "nba", "PHO", "Phoenix Suns")]
+_cl4 = _SweepClient([], [], _r_set2)
+n = _j.ensure_rating_aliases(_cl4, log=lambda m: None)
+check("janitor ratings: existing alias not duplicated", n == 5)
 print()
 print("=" * 78)
 print(f"RESULT: {PASS} passed, {FAIL} failed")
