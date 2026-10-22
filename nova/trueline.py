@@ -45,28 +45,41 @@ def _num(v, default=0.0):
 # ---------------------------------------------------------------- injuries
 
 def _side_injury_impact(rows, league):
-    """Raw personnel-impact points for one side from the injury book."""
-    total = 0.0
-    flagged = []
-    for r in rows or []:
+    """Raw personnel-impact points for one side from the injury book.
+    The Injury store is written by several sources (worker + app-side
+    automations), so the same player can appear multiple times; a player
+    is ONE person, not N — dedupe by canonical name, keep the strongest
+    (max-impact) copy."""
+    def _impact(r):
         st = str(r.get("status") or "").lower()
         imp = _num(r.get("impact_rating"), 0.0)
-        # availability discount: questionable players usually play
         if "questionable" in st:
             imp *= 0.35
         elif "doubtful" in st:
             imp *= 0.60
         pos = str(r.get("position") or "").upper()
-        # position criticality: the QB is the line in football; the goalie
-        # is the line in hockey — deterministic weights, no star guessing
         if league in ("nfl", "ncaaf") and pos == "QB":
             imp += 1.5 if "out" in st else (0.8 if "doubtful" in st else 0.3)
         elif league == "nhl" and pos == "G":
             imp += 1.0 if "out" in st else 0.3
+        return imp
+
+    best = {}
+    for r in rows or []:
+        key = str(r.get("player_name") or "").strip().lower() \
+            or str(r.get("position") or "")
+        imp = _impact(r)
+        if key not in best or imp > best[key][0]:
+            best[key] = (imp, r)
+    total = 0.0
+    flagged = []
+    for key, (imp, r) in best.items():
         if imp > 0:
             total += imp
             if len(flagged) < 4:
-                flagged.append(f"{r.get('position') or '?'} {r.get('player_name') or '?'} ({st})")
+                st = str(r.get("status") or "").lower()
+                flagged.append(f"{r.get('position') or '?'} "
+                               f"{r.get('player_name') or '?'} ({st})")
     return min(total, config.TRUELINE_INJURY_SIDE_CAP), flagged
 
 

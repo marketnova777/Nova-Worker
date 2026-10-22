@@ -19,7 +19,7 @@ import sys
 
 from nova import (config, espn, odds, reads, llm, enrich, props, web, answers,
                   grades, janitor, research, synthesis, versioning, llm_queue,
-                  markets as mktreads)
+                  matching, markets as mktreads)
 from nova.api import Base44Client, changed_fields
 
 
@@ -27,13 +27,19 @@ def log(section, msg):
     print(f"[{datetime.now().strftime('%H:%M:%S')}] {section}: {msg}")
 
 
-def _injury_details(game, injuries):
-    """{home: [rows], away: [rows]} matched by team abbr/name."""
+def _injury_details(game, injuries, name_map=None):
+    """{home: [rows], away: [rows]} matched by team abbr/name.
+    Name-only games (NBA/NHL worker rows) resolve through the ESPN
+    name_map first — canon(display name) never equals canon(abbr)."""
     from nova import matching as _m
     out = {"home": [], "away": []}
-    lg = str(game.get("league_code") or game.get("sport") or "").upper()
+    lg_raw = str(game.get("league_code") or game.get("sport") or "")
+    lg = lg_raw.upper()
+    lg_map = (name_map or {}).get(lg_raw.lower()) or {}
     for side in ("home", "away"):
         target = _m.canon(game.get(f"{side}_team") or game.get(f"{side}_team_name") or "", lg)
+        if target and lg_map:
+            target = lg_map.get(target, target)
         if not target:
             continue
         for i in injuries or []:
@@ -433,7 +439,7 @@ def run(dry=None):
         for o in rows:
             if str(o.get("market_type") or "").lower() == "spread" and o.get("home_line") is not None:
                 tape.append((o.get("created_date"), o.get("home_line"), o.get("home_price")))
-        inj_details = _injury_details(g, injuries_all)
+        inj_details = _injury_details(g, injuries_all, name_map=name_map)
         # ---- analysis versioning (doctrine 34/79): immutable read chains.
         # input_hash fingerprints the MATERIAL inputs; quiet cycles keep
         # the prior version; material changes mint v+1 with supersedes.
@@ -449,7 +455,7 @@ def run(dry=None):
         _meta = versioning.next_meta(_prior_meta, _pre_hash)
         result = reads.compute_read(g, pair, markets,
                                     juice=juice_by_game.get(g["id"]),
-                                    form=reads.resolve_form(g, forms),
+                                    form=_frm,
                                     movement=enrich.movement_context(rows),
                                     weather=weather_by_game.get(g["id"]),
                                     rest=rest_ctx, injuries=n_inj,
@@ -952,13 +958,16 @@ def run(dry=None):
         n_new_a = len(analysis_new)
     inj_key = {}
     for r in existing_injuries:
-        inj_key[(str(r.get("league_code") or "").lower(), r.get("team_abbr"),
-                 r.get("player_name"))] = r
+        _ilk = str(r.get("league_code") or "").lower()
+        inj_key[(_ilk, matching.canon(r.get("team_abbr") or "", _ilk),
+                 str(r.get("player_name") or "").strip().lower())] = r
     n_new_i = n_upd_i = 0
     injury_new = []
     seen_keys = set()
     for p in injury_upserts:
-        key = (p["league_code"], p["team_abbr"], p["player_name"])
+        _plk = str(p.get("league_code") or "").lower()
+        key = (_plk, matching.canon(p.get("team_abbr") or "", _plk),
+               str(p.get("player_name") or "").strip().lower())
         if key in seen_keys:
             continue
         seen_keys.add(key)
@@ -1053,6 +1062,7 @@ def run(dry=None):
         # ---- data-level self-heal sweeps (idempotent, every cycle) ----
         try:
             janitor.dedupe_forms(client, log=lambda m: log("janitor", m))
+            janitor.dedupe_injuries(client, log=lambda m: log("janitor", m))
         except Exception as e:
             log("janitor", f"forms dedupe failed (non-fatal): {e}")
         try:

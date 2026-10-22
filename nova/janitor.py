@@ -259,6 +259,40 @@ def dedupe_forms(client, log=print):
     return len(doomed)
 
 
+
+INJURY_DEDUPE_MAX = 120   # bounded deletes/cycle — heals the store slowly
+                          # (3 writers have overlapped since mid-Oct)
+
+def dedupe_injuries(client, log=print):
+    """The Injury entity is written by several sources (worker + app-side
+    automations), so the same (league, team, player) exists 2-4x. A player
+    is one person: keep the freshest copy per canonical key, delete the
+    rest. Bounded to INJURY_DEDUPE_MAX deletions per cycle."""
+    from collections import defaultdict
+    from nova import matching as _m
+    rows = client.list_all("Injury", fields=["id", "league_code",
+                                             "team_abbr", "player_name",
+                                             "updated_date", "created_date"])
+    key = defaultdict(list)
+    for r in rows:
+        lg = str(r.get("league_code") or "").lower()
+        k = (lg, _m.canon(r.get("team_abbr") or "", lg),
+             str(r.get("player_name") or "").strip().lower())
+        key[k].append(r)
+    doomed = []
+    for grp in key.values():
+        if len(grp) > 1:
+            grp.sort(key=lambda r: str(r.get("updated_date")
+                                       or r.get("created_date") or ""),
+                     reverse=True)
+            doomed += [r["id"] for r in grp[1:]]
+    doomed = doomed[:INJURY_DEDUPE_MAX]
+    if doomed:
+        _delete_ids(client, "Injury", doomed)
+        log(f"injury dedupe: deleted {len(doomed)} duplicate rows "
+            f"(bounded at {INJURY_DEDUPE_MAX}/cycle)")
+    return len(doomed)
+
 def dedupe_current_odds(client, log=print):
     """Multiple odds writers leave 2+ is_current rows per (game, book,
     market). Keep the newest snapshot, supersede the rest (is_current

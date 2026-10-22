@@ -15,6 +15,13 @@ ALIASES = {
 # ESPN during the Sep-Oct 2026 cleanups (e.g. odds-api calls Liberty "NY"
 # in NCAAF, but "NY" is New York Liberty in WNBA — so scope by league).
 LEAGUE_ALIASES = {
+    "nba": {
+        # odds-api / mixed-source abbrs -> ESPN identity (verified against
+        # espn.teams_map values Oct 22 2026; both conventions live in the
+        # Injury + TeamForm stores)
+        "GSW": "GS", "NOP": "NO", "NYK": "NY", "PHO": "PHX",
+        "SAS": "SA", "UTA": "UTAH", "WAS": "WSH",
+    },
     "ncaaf": {
         "NY": "LIB", "SAMH": "SHSU", "SANJ": "SJSU", "WYOM": "WYO",
         "MISS": "MSST",

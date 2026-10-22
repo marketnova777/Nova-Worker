@@ -1380,11 +1380,19 @@ check("trueline: QB gets position weight above raw impact",
 check("trueline: questionable discounted 65%",
       abs(_b["away_impact"] - 4.0 * 0.35) < 0.01, f"away_impact={_b['away_impact']}")
 
-_huge = {"home": [{"position": "WR", "status": "Out For Season", "impact_rating": 5.0}] * 20,
+_huge = {"home": [{"position": "WR", "status": "Out For Season",
+                   "impact_rating": 5.0, "player_name": f"P{i}"} for i in range(20)],
          "away": []}
+_dupd = {"home": [{"position": "WR", "status": "Out", "impact_rating": 5.0,
+                  "player_name": "Same Guy"}] * 4, "away": []}
 _d2, _ = _tl.injury_delta(_huge, "nfl")
 check("trueline: injury delta capped at TRUELINE_INJURY_CAP",
       _d2 == -tconfig.TRUELINE_INJURY_CAP, f"delta={_d2}")
+_dupd_d, _dupd_b = _tl.injury_delta(_dupd, "nfl")
+check("trueline: duplicate injury rows count once (deduped by player)",
+      _dupd_b["home_impact"] == 5.0, f"impact={_dupd_b['home_impact']}")
+check("trueline: 20 distinct players hit the side cap",
+      _tl.injury_delta(_huge, "nfl")[1]["home_impact"] == tconfig.TRUELINE_INJURY_SIDE_CAP)
 _d3, _b3 = _tl.injury_delta({"home": [], "away": []}, "nfl")
 check("trueline: empty injury book -> zero delta, fail-open",
       _d3 == 0.0 and _b3["delta"] == 0.0)
@@ -1485,6 +1493,36 @@ check("total read: environment journals into telemetry",
       and _twind["telemetry"]["environment"]["env_delta"] < 0)
 check("total read: no weather/injuries -> identical to baseline",
       _ctr(_tg, _tform, _tmkt)["true_line"] == _tbase["true_line"])
+
+# ============================================================
+# Construction input resolution (name-only games must resolve)
+# ============================================================
+from nova.cycle import _injury_details as _idtl
+from nova import espn as _espn_mod
+_nm = {}
+for _lg in ("nba", "nhl"):
+    try:
+        _tm = _espn_mod.teams_map(_lg)
+        if _tm:
+            _nm[_lg] = _tm
+    except Exception:
+        pass
+_gname = {"league_code": "nba", "home_team": "Golden State Warriors",
+          "away_team": "Memphis Grizzlies"}
+_inj_all = [{"league_code": "nba", "team_abbr": "GS", "player_name": "P1",
+             "position": "G", "status": "Out", "impact_rating": 4.0},
+            {"league_code": "nba", "team_abbr": "PHO", "player_name": "P2",
+             "position": "G", "status": "Out", "impact_rating": 4.0}]
+_gn2 = {"league_code": "nba", "home_team": "Phoenix Suns",
+         "away_team": "Memphis Grizzlies"}
+check("cycle: injury details resolve name-only NBA games via name_map",
+      len(_idtl(_gname, _inj_all, name_map=_nm)["home"]) == 1
+      and len(_idtl(_gn2, _inj_all, name_map=_nm)["home"]) == 1)
+check("cycle: injury details fail-open without name_map (no crash)",
+      _idtl(_gname, _inj_all)["home"] == [])
+_gabbr = {"league_code": "nba", "home_team": "GSW", "away_team": "MEM"}
+check("cycle: injury details still match abbr-only games",
+      len(_idtl(_gabbr, _inj_all)["home"]) == 1)
 
 print()
 print("=" * 78)
