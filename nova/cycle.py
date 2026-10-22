@@ -661,7 +661,11 @@ def run(dry=None):
                 "game_state_support", "regression_support", "weather", "lineup_status",
                 "why_market_here", "thesis", "nova_read", "risk", "buy_to", "thesis_json",
                 "regression_notes", "market_tape", "true_line_basis",
-                "value_window", "data_confidence"])
+                "value_window", "data_confidence",
+                # construction telemetry (form/injury/rest/weather stacks):
+                # WITHOUT this the read keeps the pre-construction telemetry
+                # forever even after the engine starts firing (fixed Oct 22)
+                "data_quality_json"])
             # self-heal: reads written before answer packs existed carry no
             # thesis_json; if fields are otherwise unchanged the read would
             # never be rewritten — force the pack in so no read is pack-less
