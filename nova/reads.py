@@ -16,7 +16,7 @@ Pipeline per game (pregame, within the lookahead window):
   7. Cycle writes only when numbers/material fields changed, and never
      touches bet_* recommendation fields.
 
-Status taxonomy strictly: PLAY / LEAN / MONITOR / PASS / NUMBER GONE /
+Status taxonomy strictly: PLAY / MONITOR / PASS / NUMBER GONE /
 AWAITING DATA.
 """
 import json
@@ -33,7 +33,7 @@ HOME_FIELD = {"nfl": 2.5, "ncaaf": 2.5, "nba": 2.3, "ncaab": 3.0,
 STATUS_MAP = {
     "PLAY": "PLAY",
     "STRONG_DISCREPANCY": "PLAY",
-    "LEAN": "LEAN",
+    "LEAN": "PLAY",  # LEAN retired Oct 28 2026
     "MONITOR": "MONITOR",
     "PASS": "PASS",
     "NUMBER_GONE": "NUMBER GONE",

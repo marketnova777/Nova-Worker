@@ -184,7 +184,6 @@ def build_thesis(game, result, ctx):
         sent.append(f"The gate says {status}: {reason}")
     else:
         gates = {"PLAY": "the edge clears the full-conviction threshold",
-                 "LEAN": "the edge clears the lean band but not the full gate",
                  "MONITOR": "structure is interesting but the edge sits below action",
                  "PASS": "no meaningful advantage at this number",
                  "NUMBER GONE": "the market already repriced the original gap"}
@@ -251,7 +250,6 @@ def build_value_window(game, result):
     try:
         status = result.get("status")
         zone = ("inside the PLAY window" if status == "PLAY"
-                else "inside the LEAN window" if status == "LEAN"
                 else "inside the MONITOR window" if status == "MONITOR"
                 else "outside the value window" if status in ("PASS", "NUMBER GONE")
                 else "ungraded")
@@ -259,7 +257,6 @@ def build_value_window(game, result):
         zone = "ungraded"
     side_mp = _side_number(mp, vs)
     return (f"PLAY: {side_team} {_fmt_line(side_mp)} or better. "
-            f"LEAN: to {_fmt_line(side_mp + 1.0)}. "
             f"NUMBER GONE: at {_fmt_line(_side_number(tl, vs))}. "
             f"Current market {_fmt_line(_side_number(line, vs))} sits {zone} "
             f"({edge:.1f} pts vs fair).")

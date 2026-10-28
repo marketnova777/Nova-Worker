@@ -296,7 +296,7 @@ tp5.spread = -5.0
 d_fav = decide(true_price=tp5, market_line=-1.0, market="pregame_spread", direction="favorite")
 check("true -5 vs market -1 is a 4-point edge", d_fav.raw_edge == 4.0)
 check("value side is the FAVORITE (market lays fewer than true)", -1.0 > -5.0)
-check("minimum playable for true -5 is -3.0", d_fav.minimum_playable_price == -3.0)
+check("minimum playable for true -5 is -3.5 (PLAY band 1.5)", d_fav.minimum_playable_price == -3.5)
 check("market -1 is still playable for the favorite", -1.0 >= d_fav.minimum_playable_price)
 d_dog = decide(true_price=tp5, market_line=-9.0, market="pregame_spread", direction="dog")
 check("mirror: true -5 vs market -9 is a 4-point edge to the dog", d_dog.raw_edge == 4.0)
@@ -323,7 +323,7 @@ _pair = {"home": {"rating": 3.0}, "away": {"rating": 0.0}}
 _mk = lambda line: {"spread": {"market_line": line, "book": "draftkings"}}
 _ju_against = {"side": "home", "line_held": True, "worse": True, "from": -110, "to": -125}
 _r_lean = compute_read(_g, _pair, _mk(-1.0), juice=_ju_against)
-check("edge game keeps its status under juice pressure", _r_lean["status"] == "LEAN")
+check("edge game keeps PLAY status under juice pressure (LEAN retired)", _r_lean["status"] == "PLAY")
 check("juice pressure marker recorded on the value side",
       _r_lean["telemetry"]["juice_pressure"] == "against_value_side")
 check("value side resolved home (favorite at -1 vs true -5)",
@@ -348,7 +348,7 @@ check("home fav laying -6.5 vs true -5 -> value is AWAY",
       _r_dog["telemetry"]["value_side"] == "away")
 check("buy-to prints the SIDE number (sign flipped for away value)",
       isinstance(_r_dog.get("invalidators"), list)
-      and "(Bears +7.5 or better)" in _r_dog["invalidators"][0])
+      and "(Bears +7.0 or better)" in _r_dog["invalidators"][0])
 _r_quiet = compute_read(_g, _pair, _mk(-4.5), juice=_ju_against)
 check("quiet PASS upgrades to MONITOR on juice pressure", _r_quiet["status"] == "MONITOR")
 _r_opp = compute_read(_g, _pair, _mk(-4.5),
@@ -371,8 +371,8 @@ check("heavy juice pays the quarter-point tax (-150 -> 1.0 pt)",
       and _vt2["telemetry"]["effective_edge"] == _vt2["raw_edge"] - 1.0)
 _ctrl = compute_read(_g, _pair, _mkv(-3.5, -110))
 _capped = compute_read(_g, _pair, _mkv(-3.5, -145))
-check("LEAN capped to MONITOR when vig eats the lean threshold",
-      _ctrl["status"] == "LEAN" and _capped["status"] == "MONITOR")
+check("PLAY capped to MONITOR when vig eats the play threshold",
+      _ctrl["status"] == "PLAY" and _capped["status"] == "MONITOR")
 _dead = compute_read(_g, _pair, _mkv(-3.5, -190))
 check("vig can zero the edge entirely (-190 -> PASS)",
       _dead["status"] == "PASS" and _dead["telemetry"]["effective_edge"] == 0.0)
@@ -391,8 +391,8 @@ _d_ps = decide(true_price=_tp, market_line=-1.0, market="pregame_spread",
                direction="favorite", supporting_modules=["psychology", "talent"])
 _d_ok = decide(true_price=_tp, market_line=-1.0, market="pregame_spread",
                direction="favorite", supporting_modules=["talent", "regression"])
-check("psychology + talent does NOT satisfy PLAY_REQUIRES_SUPPORT (v1.1 A1)",
-      _d_ps.status == "LEAN")
+check("single-source PLAY keeps PLAY with conviction note (LEAN retired)",
+      _d_ps.status == "PLAY")
 check("two real modules (talent + regression) still reach PLAY",
       _d_ok.status == "PLAY")
 _mform = {"team_abbr": "Rams", "league_code": "NFL",
@@ -403,7 +403,7 @@ _mform = {"team_abbr": "Rams", "league_code": "NFL",
 _r_hot = compute_read(_g, _pair, _mkv(-1.0, -110), form={"home": _mform, "away": None})
 check("hot streak on the value side is recorded, not converted",
       _r_hot["telemetry"]["streak"] == {"side": "home", "kind": "W3", "len": 3}
-      and _r_hot["status"] == "LEAN")
+      and _r_hot["status"] == "PLAY")
 check("recency anchor flags a >=21pt blowout in the most recent game",
       compute_read(_g, _pair, _mkv(-1.0, -110),
                    form={"home": {"team_abbr": "Rams", "league_code": "NFL",
@@ -1293,7 +1293,7 @@ check("forms: scoreboard OKLA translated to official OU via team-id join",
 # --- kernel: pregame_total thresholds exist ---
 from nova import kernel as _kn_mod
 check("kernel: pregame_total threshold band present",
-      _kn_mod.PRICE_THRESHOLDS["pregame_total"]["play_gte"] == 2.0)
+      _kn_mod.PRICE_THRESHOLDS["pregame_total"]["play_gte"] == 1.5)
 
 
 

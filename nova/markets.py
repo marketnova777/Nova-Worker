@@ -61,14 +61,14 @@ TOTAL_MARKET_WEIGHT = 0.7
 TOTAL_MIN_SAMPLE = 3          # games per side to use the form model
 TOTAL_BLEND_CAP = 4.0         # max |true - market| the blend can produce
 
-STATUS_MAP = {"PASS": "PASS", "MONITOR": "MONITOR", "LEAN": "LEAN",
+STATUS_MAP = {"PASS": "PASS", "MONITOR": "MONITOR", "LEAN": "PLAY",
               "PLAY": "PLAY", "STRONG_DISCREPANCY": "PLAY",
               # kernel gate statuses must land in the V3 taxonomy too
               "NO_MODEL": "AWAITING DATA",
               "INFORMATION_INCOMPLETE": "AWAITING DATA",
               "REPRICE_REQUIRED": "AWAITING DATA",
               "AWAITING DATA": "AWAITING DATA"}
-STATUS_RANK = {"PASS": 0, "MONITOR": 1, "LEAN": 2, "PLAY": 3}
+STATUS_RANK = {"PASS": 0, "MONITOR": 1, "PLAY": 3}
 
 # fair-probability band where the normal margin model is trusted to
 # carry action weight on ML reads
@@ -335,7 +335,7 @@ def compute_ml_read(game, true_spread, market_rows):
     # points); no creditable supporting modules -> capped at LEAN
     status = STATUS_MAP.get(kernel.classify_threshold(raw_edge, "moneyline"), "PASS")
     if status == "PLAY":
-        status = "LEAN"      # PLAY_REQUIRES_SUPPORT: one-input model, no modules
+        status = "PLAY"      # one-input model, no modules: conviction noted, play stands (LEAN retired Oct 28)
     # tail-band honesty gate: the normal margin model is trustworthy near
     # pick'em and weakest in the tails — a 10% fair probability carries
     # more model error than the edge it claims. Outside the band the read

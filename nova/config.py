@@ -86,7 +86,10 @@ ODDS_API_SPORTS = {
 TERMINAL_EXEMPT = {"canceled", "postponed", "suspended", "delayed"}
 
 # Status taxonomy (V3 directive) — never invent new states.
-STATUS_TAXONOMY = ["PLAY", "LEAN", "MONITOR", "PASS", "NUMBER GONE", "AWAITING DATA"]
+# LEAN retired Oct 28 2026 (owner policy: an edge is a PLAY). Kept in the
+# list only so historical records still validate.
+STATUS_TAXONOMY = ["PLAY", "MONITOR", "PASS", "NUMBER GONE", "AWAITING DATA",
+                   "LEAN"]  # legacy history only — never emitted
 
 # Edge sanity gate: |edge| never > 8 points vs true line (hard product rule).
 MAX_EDGE_POINTS = 8.0

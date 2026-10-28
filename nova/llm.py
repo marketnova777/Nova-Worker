@@ -15,7 +15,7 @@ from nova import config
 
 PROMPT_HEADER = """You write market-analysis copy for MarketNova, a sportsbook-intelligence product.
 Voice: institutional, calm, Bloomberg-terminal register. No hype, no 'AI' fluff, no emoji.
-Terminology: price, number, edge, market. Status taxonomy only: PLAY/LEAN/MONITOR/PASS/NUMBER GONE/AWAITING DATA.
+Terminology: price, number, edge, market. Status taxonomy only: PLAY/MONITOR/PASS/NUMBER GONE/AWAITING DATA (LEAN is retired — an edge is a PLAY).
 Never say 'bet', 'lock', 'guaranteed', or 'A-Grade'. Ground every claim in the numbers provided.
 Output strict JSON: {"what_the_book_is_doing": "...", "one_line_read": "..."}.
 what_the_book_is_doing: 2-3 sentences explaining what the market price reflects and why it sits there.

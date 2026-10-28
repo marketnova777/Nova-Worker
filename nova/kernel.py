@@ -251,11 +251,15 @@ def build_true_price(team_power_gap: float, expected_pace_points: float, **adjus
 # ============================================================
 
 PRICE_THRESHOLDS = {
-    "pregame_spread": {"pass_lt": 1.0, "monitor_gte": 1.0, "lean_gte": 1.5, "play_gte": 2.0, "strong_gte": 3.0},
-    "first_half":     {"pass_lt": 1.0, "lean_gte": 1.0, "play_gte": 1.5, "strong_gte": 2.0},
-    "second_half":    {"pass_lt": 1.5, "monitor_gte": 1.5, "lean_gte": 2.0, "play_gte": 3.0, "strong_gte": 4.0},
-    "pregame_total":  {"pass_lt": 1.0, "monitor_gte": 1.0, "lean_gte": 1.5, "play_gte": 2.0, "strong_gte": 3.0},
-    "moneyline":      {"pass_lt": 2.0, "monitor_gte": 2.0, "lean_gte": 3.0, "play_gte": 4.0, "strong_gte": 6.0},
+    # LEAN retired (owner policy, Oct 28 2026): the engine does the work
+    # to break down the edge, so a qualifying edge is a PLAY — we live
+    # with every result. The former lean band is the PLAY band; MONITOR
+    # covers the noise band between pass_lt and play_gte.
+    "pregame_spread": {"pass_lt": 1.0, "monitor_gte": 1.0, "play_gte": 1.5, "strong_gte": 3.0},
+    "first_half":     {"pass_lt": 1.0, "monitor_gte": 1.0, "play_gte": 1.5, "strong_gte": 2.0},
+    "second_half":    {"pass_lt": 1.5, "monitor_gte": 1.5, "play_gte": 2.0, "strong_gte": 4.0},
+    "pregame_total":  {"pass_lt": 1.0, "monitor_gte": 1.0, "play_gte": 1.5, "strong_gte": 3.0},
+    "moneyline":      {"pass_lt": 2.0, "monitor_gte": 2.0, "play_gte": 3.0, "strong_gte": 6.0},
 }
 
 
@@ -265,8 +269,6 @@ def classify_threshold(raw_edge: float, market: str) -> str:
         return "STRONG_DISCREPANCY"
     if raw_edge >= t["play_gte"]:
         return "PLAY"
-    if raw_edge >= t["lean_gte"]:
-        return "LEAN"
     if raw_edge >= t.get("monitor_gte", t["pass_lt"]):
         return "MONITOR"
     return "PASS"
@@ -576,9 +578,12 @@ def decide(*, true_price: TruePrice, market_line: float,
         # it does NOT count toward the PLAY support requirement.
         credit_mods = [m for m in mods if m != "psychology"]
         if len(credit_mods) < 2:                              # GATE 8 — PLAY_REQUIRES_SUPPORT
-            status = "LEAN"
-            gates.append("PLAY_REQUIRES_SUPPORT")
-            t.append(("GATE:PLAY_REQUIRES_SUPPORT", f"only {len(credit_mods)} creditable supporting module(s); PLAY downgraded to LEAN"))
+            # LEAN retired (Oct 28 2026): a priced edge is a PLAY even on
+            # thin support — the conviction note rides in telemetry instead
+            # of silently downgrading a real signal.
+            status = "PLAY"
+            gates.append("PLAY_SINGLE_SOURCE")
+            t.append(("GATE:PLAY_SINGLE_SOURCE", f"{len(credit_mods)} creditable supporting module(s); PLAY kept, conviction noted"))
         elif edge_score >= 8 and len(credit_mods) >= 3 and movement_score > -3:   # GATE 9 — STRONG_DISCREPANCY
             status = "STRONG_DISCREPANCY"
             gates.append("STRONG_DISCREPANCY")
