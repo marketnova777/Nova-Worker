@@ -298,15 +298,16 @@ SPORT_BY_LEAGUE = {"nfl": "football", "ncaaf": "football",
                    "wnba": "basketball", "nhl": "hockey", "mlb": "baseball"}
 
 
-def normalize_league_codes(client, log=print):
+def normalize_league_codes(client, log=print, rows=None):
     """Canonical league_code is lowercase everywhere (Game rows, matching,
     ESPN configs, prop slugs). A writer that uppercased it split the board
     in two: the UI filters reads by lowercase league, so uppercase rows
     silently vanish from their sport tab. Lowercase every current read and
     fill `sport` with the sport name (not the league code). History is
     left alone."""
-    rows = client.list_all("MarketNovaRead",
-                           fields=["id", "is_current", "league_code", "sport"])
+    if rows is None:
+        rows = client.list_all("MarketNovaRead",
+                               fields=["id", "is_current", "league_code", "sport"])
     patches = []
     for r in rows:
         if not r.get("is_current"):
@@ -314,13 +315,13 @@ def normalize_league_codes(client, log=print):
         lg = str(r.get("league_code") or "").strip()
         want_lg = lg.lower()
         want_sport = SPORT_BY_LEAGUE.get(want_lg)
-        patch = {"id": r["id"]}
+        patch = {}
         if lg != want_lg:
             patch["league_code"] = want_lg
         if want_sport and str(r.get("sport") or "").lower() != want_sport:
             patch["sport"] = want_sport
-        if len(patch) > 1:
-            patches.append(patch)
+        if patch:
+            patches.append((r["id"], patch))
     if patches:
         client.bulk_put("MarketNovaRead", patches)
         log(f"league normalize: fixed {len(patches)} current read(s) "
@@ -358,20 +359,28 @@ def prune_stale_injuries(client, days=10, limit=300, log=print):
     return len(doomed)
 
 
-def normalize_current_statuses(client, log=print):
+def normalize_current_statuses(client, log=print, rows=None):
     """Legacy v14 rows still on the board carry retired status strings
     (DATA_PENDING, SIGNAL, LEAN). Suppressed ML rows are never rewritten
     by the compute loop, so their old status survives forever while the
     janitor stamps fresh provenance — the row then looks current but
     speaks the retired taxonomy. Map every current row onto the V3
     taxonomy (history is untouched)."""
-    taxonomy = {"PLAY", "MONITOR", "PASS", "NUMBER GONE", "AWAITING DATA"}
-    legacy = {"DATA_PENDING": "AWAITING DATA", "AWAITING_DATA": "AWAITING DATA",
+    # The MarketNovaRead schema stores AWAITING DATA as DATA_PENDING and
+    # COERCES "AWAITING DATA" on write (verified live Oct 28 2026: a 76-row
+    # rewrite read back as DATA_PENDING). DATA_PENDING is therefore the
+    # storage form of the taxonomy's AWAITING DATA, not drift - the UI maps
+    # it back for display. Rewriting it every cycle would burn writes forever.
+    taxonomy = {"PLAY", "MONITOR", "PASS", "NUMBER GONE", "AWAITING DATA",
+                "DATA_PENDING"}
+    legacy = {"AWAITING_DATA": "DATA_PENDING",
               "DATA INSUFFICIENT": "AWAITING DATA", "NO_MODEL": "AWAITING DATA",
               "INFORMATION_INCOMPLETE": "AWAITING DATA",
               "REPRICE_REQUIRED": "AWAITING DATA", "SIGNAL": "MONITOR",
               "LEAN": "PLAY", "STRONG_DISCREPANCY": "PLAY"}
-    rows = client.list_all("MarketNovaRead", fields=["id", "is_current", "status"])
+    if rows is None:
+        rows = client.list_all("MarketNovaRead",
+                               fields=["id", "is_current", "status", "league_code", "sport"])
     patches = []
     for r in rows:
         if not r.get("is_current"):
@@ -380,7 +389,7 @@ def normalize_current_statuses(client, log=print):
         if st in taxonomy:
             continue
         target = legacy.get(st, "AWAITING DATA")
-        patches.append({"id": r["id"], "status": target})
+        patches.append((r["id"], {"status": target}))
     if patches:
         client.bulk_put("MarketNovaRead", patches)
         log(f"status normalize: rewrote {len(patches)} current row(s) onto "

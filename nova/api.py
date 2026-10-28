@@ -63,6 +63,18 @@ class Base44Client:
                 attempt += 1
                 time.sleep(15 * attempt)
                 continue
+            if status == 429 and attempt < 5:   # app entity read-traffic cap
+                attempt += 1
+                hint = 24
+                try:                             # honor "Retry after N seconds"
+                    import re as _re
+                    m = _re.search(r"[Rr]etr(?:y|ies) after (\d+)", str(body))
+                    if m:
+                        hint = min(60, int(m.group(1)))
+                except Exception:
+                    pass
+                time.sleep(hint + 2 * attempt)
+                continue
             if status != 200:
                 raise RuntimeError(f"list {entity} failed {status}: {body}")
             self.reads += 1

@@ -109,7 +109,7 @@ def run(dry=None):
     log("form", f"name->abbr maps: "
         + ", ".join(f"{k}:{len(v)}" for k, v in name_map.items()))
     existing_reads = client.list_all("MarketNovaRead", fields=[
-        "id", "game_id", "market_type", "is_current", "status",
+        "id", "game_id", "market_type", "is_current", "status", "league_code", "sport",
         "marketnova_true_line", "raw_edge", "what_the_book_is_doing", "one_line_read", "thesis_json",
         "true_line_value", "market_line", "edge_direction", "final_read_json"])
     existing_weather = client.list_all("WeatherSnapshot", fields=["id", "game_id", "created_date"])
@@ -1074,8 +1074,10 @@ def run(dry=None):
         # ---- data-level self-heal sweeps (idempotent, every cycle) ----
         try:
             janitor.dedupe_forms(client, log=lambda m: log("janitor", m))
-            janitor.normalize_league_codes(client, log=lambda m: log("janitor", m))
-            janitor.normalize_current_statuses(client, log=lambda m: log("janitor", m))
+            janitor.normalize_league_codes(client, log=lambda m: log("janitor", m),
+                                          rows=existing_reads)
+            janitor.normalize_current_statuses(client, log=lambda m: log("janitor", m),
+                                              rows=existing_reads)
             janitor.prune_stale_injuries(client, log=lambda m: log("janitor", m))
             janitor.dedupe_injuries(client, log=lambda m: log("janitor", m))
         except Exception as e:
