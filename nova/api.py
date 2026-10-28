@@ -78,6 +78,7 @@ class Base44Client:
             if status != 200:
                 raise RuntimeError(f"list {entity} failed {status}: {body}")
             self.reads += 1
+            self.rows_read = getattr(self, "rows_read", 0) + len(recs)
             recs = body if isinstance(body, list) else body.get("data", [])
             out.extend(recs)
             if len(recs) < page:

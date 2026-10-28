@@ -572,6 +572,8 @@ def run(dry=None):
             # league_code/sport are REQUIRED by the live MarketNovaRead
             # schema; patches ignore them (changed_fields uses its own list)
             "league_code": str(g.get("league_code") or g.get("sport") or "").lower(),
+            "sport": janitor.SPORT_BY_LEAGUE.get(
+                str(g.get("league_code") or "").lower(), "other"),
             "sport": str(g.get("sport") or g.get("league_code") or "").lower(),
             "status": result["status"],
             "marketnova_true_line": result.get("true_line"),
@@ -705,6 +707,8 @@ def run(dry=None):
             desired_alt = {                "writer_id": "nova-worker-github",
                 "analysis_version": "V3",
                 "league_code": str(g.get("league_code") or g.get("sport") or "").lower(),
+                "sport": janitor.SPORT_BY_LEAGUE.get(
+                    str(g.get("league_code") or "").lower(), "other"),
                 "sport": str(g.get("sport") or g.get("league_code") or "").lower(),
                 "status": res["status"],
                 "marketnova_true_line": res.get("true_line"),
@@ -1037,7 +1041,8 @@ def run(dry=None):
             json.dump(prop_payloads, f, indent=1)
     log("props", f"{len(prop_payloads)} payloads | new {n_new_p}, upd {n_upd_p}"
         + ("" if prop_entity_ok else " — STAGED, entity missing"))
-    log("done", f"cycle complete: {client.writes} writes, {client.reads} bulk reads")
+    log("done", f"cycle complete: {client.writes} writes, {client.reads} reads, "
+                f"{getattr(client, 'rows_read', 0)} rows read")
 
     # ---------- identity janitor: sweep legacy dup game copies ----------
     # (the app-side legacy ESPN sync still creates v14-schema duplicates;
