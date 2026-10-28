@@ -77,10 +77,23 @@ def resolve_ratings(game, ratings):
     return out
 
 
+FRESH_BOOK_WINDOW_MIN = 60   # a coherent book must be this close to the
+                             # overall freshest quote to be preferred
+
+
 def freshest_market(odds_rows):
     """Best current snapshot per market type, normalized to
     {market: {"line": ..., "market_line": ...}} from the production
-    OddsSnapshot schema (home_line / over_line / prices)."""
+    OddsSnapshot schema (home_line / over_line / prices).
+
+    BOOK COHERENCE (Oct 28 2026): picking the freshest row per market
+    type assembled spread from one book and moneyline from another —
+    the ML model then saw an internally inconsistent pair and every
+    conflicting game sat at AWAITING DATA. A single book that carries
+    spread+total+ML (and is still fresh) now wins, so the true line,
+    the total and the ML all describe the same market. Falls back to
+    freshest-per-market when no coherent book is fresh enough — the
+    conflict gates downstream still protect those reads."""
     def _cd(o):
         try:
             dt = datetime.fromisoformat(
@@ -90,19 +103,75 @@ def freshest_market(odds_rows):
             return None  # unparseable stamp -> treated as oldest
 
     best = {}
+    per_book = {}
     for o in odds_rows:
         if not o.get("is_current"):
             continue
         mt = str(o.get("market_type", "")).lower()
         cur = best.get(mt)
-        if cur is None:
-            best[mt] = o
-            continue
         # parsed-datetime compare: raw string compares across mixed stamp
         # formats ('...03.061Z' vs '...03.061000') can pick the WRONG row
-        a, b = _cd(o), _cd(cur)
-        if a is not None and (b is None or a > b):
+        a, b = _cd(o), _cd(cur) if cur is not None else (None, None)
+        if cur is None or (a is not None and (b is None or a > b)):
             best[mt] = o
+        bk = str(o.get("book") or "").strip()
+        if bk:
+            slot = per_book.setdefault(bk, {})
+            cb = slot.get(mt)
+            a2, b2 = a, _cd(cb) if cb is not None else None
+            if cb is None or (a2 is not None and (b2 is None or a2 > b2)):
+                slot[mt] = o
+
+    # prefer a coherent book: carries spread (+ total/ML) and is fresh
+    newest_overall = max((_cd(o) for o in best.values() if _cd(o) is not None),
+                         default=None)
+    chosen = None
+    best_score = None
+    for bk, rows in per_book.items():
+        if "spread" not in rows:
+            continue
+        stamps = [_cd(r) for r in rows.values() if _cd(r) is not None]
+        if not stamps:
+            continue
+        book_stamp = max(stamps)
+        if (newest_overall is not None and
+                (newest_overall - book_stamp).total_seconds()
+                > FRESH_BOOK_WINDOW_MIN * 60):
+            continue                      # coherent but stale -> not worth it
+        completeness = len(set(rows) & {"spread", "total", "moneyline"})
+        score = (completeness, book_stamp)
+        if best_score is None or score > best_score:
+            best_score, chosen = score, bk
+    if chosen:
+        merged = dict(best)
+        merged.update(per_book[chosen])
+        best = merged
+
+    # SIDE REPAIR (Oct 28 2026): some ingested ML rows carry home/away
+    # prices swapped — their favorite contradicts the game's own spread,
+    # which we can validate against ESPN's "details" favorite. The ML row
+    # is the suspect (a flipped pair produces absurd ML edges and trips
+    # the pair-consistency gate). Repair by swapping prices when the
+    # sides clearly conflict; leave straight pairs untouched.
+    sp_row = best.get("spread")
+    ml_row = best.get("moneyline")
+    if sp_row is not None and ml_row is not None:
+        try:
+            hl = float(sp_row.get("home_line"))
+            hp = float(ml_row.get("home_price"))
+            ap = float(ml_row.get("away_price"))
+            def _p(x):
+                return (-x) / ((-x) + 100.0) if x < 0 else 100.0 / (x + 100.0)
+            ph, pa = _p(hp), _p(ap)
+            if abs(hl) >= 1.0 and abs(ph - pa) >= 0.03:
+                if (hl < 0) != (ph > pa):
+                    ml_row = dict(ml_row)
+                    ml_row["home_price"], ml_row["away_price"] = ap, hp
+                    ml_row["side_repaired"] = True
+                    best["moneyline"] = ml_row
+        except (TypeError, ValueError, ZeroDivisionError):
+            pass
+
     out = {}
     for mt, o in best.items():
         if mt == "spread":
@@ -119,6 +188,7 @@ def freshest_market(odds_rows):
                    "under_price": o.get("under_price"),
                    "book": o.get("book"),
                    "market_line": line,
+                   "side_repaired": o.get("side_repaired", False),
                    "created_date": o.get("created_date")}
     return out
 
