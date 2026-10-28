@@ -60,9 +60,16 @@ DEFAULT_SIGMA = 12.0
 
 # shrinkage: weight of the MARKET anchor in the total blend (our
 # recent-form model carries the remainder). Conservative by design.
-TOTAL_MARKET_WEIGHT = 0.7
+# Oct 28 2026: the total model could not publish a real disagreement —
+# a 70% market anchor with a 4-pt cap caps the edge at ~1.2 pts, below the
+# 1.5 PLAY band, so every total read collapsed to PASS unless environment
+# moved it. The market is still the accuracy anchor (it prices the league
+# scoring level), but the recent-form/pace model now carries 45% so a
+# genuine tempo mismatch is allowed to express itself.
+TOTAL_MARKET_WEIGHT = 0.55
 TOTAL_MIN_SAMPLE = 3          # games per side to use the form model
-TOTAL_BLEND_CAP = 4.0         # max |true - market| the blend can produce
+TOTAL_BLEND_CAP = 6.0         # max |true - market| the blend can produce
+TOTAL_FULL_SAMPLE = 6         # games per side for full model weight
 
 STATUS_MAP = {"PASS": "PASS", "MONITOR": "MONITOR", "LEAN": "PLAY",
               "PLAY": "PLAY", "STRONG_DISCREPANCY": "PLAY",
@@ -129,19 +136,22 @@ def _form_scoring(form_row):
         games = json.loads(form_row.get("last_5_json") or "[]")
     except (ValueError, TypeError):
         return None
-    scored, allowed, n = 0.0, 0.0, 0
+    scored, allowed, n, wsum = 0.0, 0.0, 0, 0.0
     for gme in games:
         try:
             s = float(gme.get("score"))
             a = float(gme.get("opponent_score"))
         except (TypeError, ValueError):
             continue
-        scored += s
-        allowed += a
+        # recency weight: the first entry is the newest game in the sample
+        w = 1.0 / (1.0 + 0.35 * n)
+        scored += s * w
+        allowed += a * w
+        wsum += w
         n += 1
-    if n < TOTAL_MIN_SAMPLE:
+    if n < TOTAL_MIN_SAMPLE or wsum <= 0:
         return None
-    return scored / n, allowed / n, n
+    return scored / wsum, allowed / wsum, n
 
 
 def compute_total_read(game, form, market_rows, weather=None,
@@ -165,13 +175,19 @@ def compute_total_read(game, form, market_rows, weather=None,
     true_total = market_total
     if h and a:
         est = (h[0] + a[1]) / 2.0 + (a[0] + h[1]) / 2.0
-        blend = TOTAL_MARKET_WEIGHT * market_total + (1 - TOTAL_MARKET_WEIGHT) * est
+        # sample-size discipline: a 3-5 game early-season pace sample cannot
+        # carry full weight (Oct 28 2026). The model's share scales linearly
+        # to FULL_SAMPLE games, so thin samples lean on the market and the
+        # basis text says so.
+        n_min = min(h[2], a[2])
+        model_w = (1 - TOTAL_MARKET_WEIGHT) * min(1.0, n_min / float(TOTAL_FULL_SAMPLE))
+        blend = (1 - model_w) * market_total + model_w * est
         blend = min(market_total + TOTAL_BLEND_CAP,
                     max(market_total - TOTAL_BLEND_CAP, blend))
         true_total = round(blend, 1)
-        basis = (f"{TOTAL_MARKET_WEIGHT:.0%} market anchor / "
-                 f"{1 - TOTAL_MARKET_WEIGHT:.0%} recent-form pace "
-                 f"({h[2]}-game samples, blend capped at {TOTAL_BLEND_CAP:.0f} pts)")
+        basis = (f"{1 - model_w:.0%} market anchor / {model_w:.0%} "
+                 f"recency-weighted pace model ({n_min}-game samples, "
+                 f"blend capped at {TOTAL_BLEND_CAP:.0f} pts)")
 
     # game-reality construction (nova/trueline.py): environment + missing-QB
     # effects priced on the TOTAL — bounded, journaled, fail-open

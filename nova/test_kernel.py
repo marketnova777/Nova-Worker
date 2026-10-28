@@ -1072,9 +1072,14 @@ _gm = {"league_code": "nfl", "home_team": "KC", "away_team": "SF",
 _mr_tot = {"total": {"market_line": 47.5, "over_price": -110,
                      "under_price": -110, "created_date": "2026-10-16T13:00:00Z"}}
 _tr = _mk.compute_total_read(_gm, _fr, _mr_tot)
-# est = (25.5+28.67)/2 + (17+17.75)/2 = 44.46; blend = .7*47.5+.3*44.46 = 46.6
-check("total: recent-form blend rounds to the model price",
-      _tr and abs(_tr["true_line"] - 46.6) < 0.05
+# Oct 28 2026: blend reweighted to 55/45 and the form sample is
+# recency-weighted, so the newest games pull the estimate up (the model
+# now has room to disagree with the market; previously a 70% anchor +
+# 4-pt cap made a PLAY total mathematically unreachable).
+# a 3-game sample carries only ~22% of the blend (sample-size discipline),
+# so the market anchors the number and the edge stays small
+check("total: recency-weighted blend rounds to the model price",
+      _tr and abs(_tr["true_line"] - 46.8) < 0.05
       and _tr["value_side"] == "under" and _tr["status"] == "PASS"
       and _tr["edge_unit"] == "POINTS")
 check("total: no total market -> no record",

@@ -20,8 +20,12 @@ from datetime import datetime, timedelta, timezone
 
 from nova import espn, matching
 
-WINDOW_DAYS = {"nba": 21, "nfl": 28, "ncaaf": 21, "nhl": 14, "mlb": 14,
-               "wnba": 14}
+# Oct 28 2026: weekly sports were starving the total model — a 21-day
+# NCAAF window is 3 games, so one bye left n=2 and the sample test
+# (TOTAL_MIN_SAMPLE=3) rejected it, publishing market-anchor-only totals
+# with a hard 0.0 edge. LAST_N still caps the actual sample at 5.
+WINDOW_DAYS = {"nba": 28, "nfl": 45, "ncaaf": 45, "nhl": 21, "mlb": 21,
+               "wnba": 21}
 DEFAULT_WINDOW = 14
 LAST_N = 5
 

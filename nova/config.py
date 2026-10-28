@@ -30,7 +30,9 @@ LLM_QUEUE_ENTITY = os.environ.get("NOVA_LLM_QUEUE_ENTITY") or "LLMTask"
 RESEARCH_DISABLED = os.environ.get("NOVA_RESEARCH", "") == "0"
 RESEARCH_CONTEXT_SIZE = os.environ.get("NOVA_RESEARCH_CONTEXT", "high")
 RESEARCH_MAX_GAMES = int(os.environ.get("NOVA_RESEARCH_MAX_GAMES", "6"))
-RESEARCH_WINDOW_H = float(os.environ.get("NOVA_RESEARCH_WINDOW_H", "48"))
+# 96h so the weekend slate (NCAAF/NFL) is analyzed days ahead, not
+# the morning of — a 48h window left most of Saturday with no reads.
+RESEARCH_WINDOW_H = float(os.environ.get("NOVA_RESEARCH_WINDOW_H", "96"))
 RESEARCH_TIMEOUT_S = int(os.environ.get("NOVA_RESEARCH_TIMEOUT_S", "180"))
 
 # MODE 2 synthesis layer (structured game-construction) — runs on the
@@ -54,7 +56,10 @@ RESEARCH_TTL_FAR = float(os.environ.get("NOVA_RESEARCH_TTL_FAR", "12"))   # >24h
 # Cycle behavior
 LEAGUES = [l.strip().lower() for l in os.environ.get(
     "NOVA_LEAGUES", "nfl,ncaaf,nhl,nba,ncaab,wnba,mlb").split(",") if l.strip()]
-LOOKAHEAD_DAYS = int(os.environ.get("NOVA_LOOKAHEAD_DAYS", "2"))
+# Oct 28 2026: 2 days meant Saturday's NCAAF/NFL slate had no reads
+# until Friday night — most of the board looked empty. 4 days covers
+# the weekend; reads are cheap (only changed fields are written).
+LOOKAHEAD_DAYS = int(os.environ.get("NOVA_LOOKAHEAD_DAYS", "4"))
 RECONCILE_BACK_DAYS = int(os.environ.get("NOVA_RECONCILE_BACK_DAYS", "5"))  # past-game status sync window
 DRY_RUN = os.environ.get("NOVA_DRY_RUN", "") == "1"
 

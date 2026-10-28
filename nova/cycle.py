@@ -82,7 +82,7 @@ def run(dry=None):
     ratings = client.list_all("TeamRating")
     # daily TeamForm self-heal (UTC 00/12 cycles): stale form rows starve
     # the total-read pace model -> honest 0.0-edge fallbacks (Oct 16 2026)
-    if datetime.now(timezone.utc).hour % 12 == 0:
+    if datetime.now(timezone.utc).hour % 6 == 0:
         try:
             from nova import forms as _forms_mod
             _stats = _forms_mod.refresh(client, [
@@ -1072,6 +1072,8 @@ def run(dry=None):
         # ---- data-level self-heal sweeps (idempotent, every cycle) ----
         try:
             janitor.dedupe_forms(client, log=lambda m: log("janitor", m))
+            janitor.normalize_current_statuses(client, log=lambda m: log("janitor", m))
+            janitor.prune_stale_injuries(client, log=lambda m: log("janitor", m))
             janitor.dedupe_injuries(client, log=lambda m: log("janitor", m))
         except Exception as e:
             log("janitor", f"forms dedupe failed (non-fatal): {e}")

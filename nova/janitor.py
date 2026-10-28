@@ -293,6 +293,66 @@ def dedupe_injuries(client, log=print):
             f"(bounded at {INJURY_DEDUPE_MAX}/cycle)")
     return len(doomed)
 
+def prune_stale_injuries(client, days=10, limit=300, log=print):
+    """The Injury entity accumulates every historical report (audit Oct 28
+    2026: NFL had 853 rows, median age 8.8 days, 481 older than a week).
+    Stale rows are BAD DATA, not history: a player marked OUT three weeks
+    ago still reads as OUT in the construction (injury_delta) and in the
+    team-context packs. Anything not refreshed within `days` is dropped;
+    the honest state for a team with no fresh report is "no report".
+    Bounded so a cycle never deletes more than `limit` rows."""
+    from datetime import datetime, timezone, timedelta
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    rows = client.list_all("Injury", fields=["id", "updated_date", "created_date"])
+    doomed = []
+    for r in rows:
+        stamp = str(r.get("updated_date") or r.get("created_date") or "")
+        try:
+            d = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+            if d.tzinfo is None:
+                d = d.replace(tzinfo=timezone.utc)
+        except (ValueError, TypeError):
+            continue          # unparseable: leave for the dedupe pass
+        if d < cutoff:
+            doomed.append(r["id"])
+    doomed = doomed[:limit]
+    if doomed:
+        _delete_ids(client, "Injury", doomed)
+        log(f"injury prune: deleted {len(doomed)} stale rows "
+            f"(older than {days}d, bounded at {limit}/cycle)")
+    return len(doomed)
+
+
+def normalize_current_statuses(client, log=print):
+    """Legacy v14 rows still on the board carry retired status strings
+    (DATA_PENDING, SIGNAL, LEAN). Suppressed ML rows are never rewritten
+    by the compute loop, so their old status survives forever while the
+    janitor stamps fresh provenance — the row then looks current but
+    speaks the retired taxonomy. Map every current row onto the V3
+    taxonomy (history is untouched)."""
+    taxonomy = {"PLAY", "MONITOR", "PASS", "NUMBER GONE", "AWAITING DATA"}
+    legacy = {"DATA_PENDING": "AWAITING DATA", "AWAITING_DATA": "AWAITING DATA",
+              "DATA INSUFFICIENT": "AWAITING DATA", "NO_MODEL": "AWAITING DATA",
+              "INFORMATION_INCOMPLETE": "AWAITING DATA",
+              "REPRICE_REQUIRED": "AWAITING DATA", "SIGNAL": "MONITOR",
+              "LEAN": "PLAY", "STRONG_DISCREPANCY": "PLAY"}
+    rows = client.list_all("MarketNovaRead", fields=["id", "is_current", "status"])
+    patches = []
+    for r in rows:
+        if not r.get("is_current"):
+            continue
+        st = str(r.get("status") or "").strip().upper()
+        if st in taxonomy:
+            continue
+        target = legacy.get(st, "AWAITING DATA")
+        patches.append({"id": r["id"], "status": target})
+    if patches:
+        client.bulk_put("MarketNovaRead", patches)
+        log(f"status normalize: rewrote {len(patches)} current row(s) onto "
+            f"the V3 taxonomy")
+    return len(patches)
+
+
 def dedupe_current_odds(client, log=print):
     """Multiple odds writers leave 2+ is_current rows per (game, book,
     market). Keep the newest snapshot, supersede the rest (is_current
