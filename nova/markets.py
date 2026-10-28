@@ -392,9 +392,23 @@ def compute_ml_read(game, true_spread, market_rows):
                            f"{prior_sigma:.1f}) disagree — cross-market data "
                            "conflict, not an edge."),
                 "raw_edge": None, "true_line": None,
-                "market_line": ml_row.get("home_price"),
+                "market_line": None,
                 "market_odds": ml_row.get("home_price"),
-                "edge_unit": "PROBABILITY"}
+                "edge_unit": "PROBABILITY",
+                "one_line_read": None,
+                "telemetry": {"market": "moneyline", "conflict": "spread_ml_pair",
+                              "implied_sigma": round(ml_pair_conflict, 2)},
+                "invalidators": ["Spread and ML prices disagree about this game's curve"],
+                "buy_to": None, "minimum_playable": None,
+                "data_confidence": 0, "confidence": 0,
+                "true_line_basis": "suppressed — spread/ML pair conflict",
+                "why_market_here": "Suppressed: the game's own spread and ML imply "
+                                   "different margin curves (cross-book/timestamp conflict).",
+                "thesis": "No honest ML read at this pair — the two markets "
+                          "contradict each other.",
+                "risk": "Suppressed read: data conflict, not an edge.",
+                "next_trigger": "Re-run when the spread and ML pairs agree.",
+                "playable_until": None}
     # true spread is home-perspective (negative = home favored); expected
     # home margin = -spread; P(home wins) = Phi(margin / sigma)
     fair_home = 0.5 * (1 + math.erf((-true_spread / sigma) / math.sqrt(2)))
@@ -407,10 +421,25 @@ def compute_ml_read(game, true_spread, market_rows):
                 "reason": (f"Spread-derived ML edge {raw_edge:.1f} pts is beyond the "
                            f"sanity bound ({ML_EDGE_SANITY:.0f}) — cross-market "
                            "conflict, not an edge."),
-                "raw_edge": raw_edge, "true_line": None,
-                "market_line": ml_row.get(f"{value_side}_price"),
+                "raw_edge": None, "true_line": None,
+                "market_line": None,
                 "market_odds": ml_row.get(f"{value_side}_price"),
-                "edge_unit": "PROBABILITY"}
+                "edge_unit": "PROBABILITY",
+                "one_line_read": None,
+                "telemetry": {"market": "moneyline", "conflict": "edge_beyond_sanity",
+                              "claimed_edge": raw_edge},
+                "invalidators": [f"A spread-derived ML edge of {raw_edge:.1f} pts "
+                                 "exceeds the model sanity bound"],
+                "buy_to": None, "minimum_playable": None,
+                "data_confidence": 0, "confidence": 0,
+                "true_line_basis": "suppressed — cross-market conflict",
+                "why_market_here": "Suppressed: the spread-derived probability and "
+                                   "the book's ML disagree beyond the model bound.",
+                "thesis": "No honest ML read at this pair — the spread and ML "
+                          "markets conflict; nothing publishable.",
+                "risk": "Suppressed read: data conflict, not an edge.",
+                "next_trigger": "Re-run when the spread and ML pairs agree.",
+                "playable_until": None}
     fair_side = fair_home if value_side == "home" else 1 - fair_home
     book_side = devig_home if value_side == "home" else 1 - devig_home
     fair_amer = _prob_to_american(fair_side)
@@ -448,9 +477,23 @@ def compute_ml_read(game, true_spread, market_rows):
                            f"{(implied_spread if implied_spread is not None else float('nan')):+.1f} "
                            f"disagree by {margin_conflict:.1f} — treated as a "
                            "cross-market data conflict, not an edge."),
-                "raw_edge": raw_edge, "true_line": fair_amer,
-                "market_line": book_price, "market_odds": book_price,
-                "edge_unit": "PROBABILITY"}
+                "raw_edge": None, "true_line": None,
+                "market_line": None, "market_odds": book_price,
+                "edge_unit": "PROBABILITY",
+                "one_line_read": None,
+                "telemetry": {"market": "moneyline", "conflict": "margin_space",
+                              "margin_conflict": round(margin_conflict, 2)},
+                "invalidators": [f"True spread and ML-implied spread disagree by "
+                                 f"{margin_conflict:.1f} pts"],
+                "buy_to": None, "minimum_playable": None,
+                "data_confidence": 0, "confidence": 0,
+                "true_line_basis": "suppressed — cross-market conflict",
+                "why_market_here": "Suppressed: the ML-implied spread contradicts "
+                                   "the true line beyond the bound.",
+                "thesis": "No honest ML read — the markets conflict.",
+                "risk": "Suppressed read: data conflict, not an edge.",
+                "next_trigger": "Re-run when the pairs agree.",
+                "playable_until": None}
 
     side_team = game.get(f"{value_side}_team") or value_side.upper()
     hours, stage = _hours_to_game(game)
