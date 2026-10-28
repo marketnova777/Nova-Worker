@@ -235,13 +235,13 @@ def merge_duplicates(client, games, log=print):
 
 FORMS_KEEP = 1          # keep the newest TeamForm row per (league, abbr)
 
-def dedupe_forms(client, log=print):
+def dedupe_forms(client, log=print, rows=None):
     """Legacy backfills left duplicate TeamForm rows per (league, abbr).
     Keep the newest row of each group, delete the rest."""
     from collections import defaultdict
-    forms = client.list_all("TeamForm", fields=["id", "league_code",
-                                                "team_abbr", "updated_date",
-                                                "created_date"])
+    forms = rows if rows is not None else client.list_all(
+        "TeamForm", fields=["id", "league_code", "team_abbr",
+                            "updated_date", "created_date"])
     key = defaultdict(list)
     for f in forms:
         k = (str(f.get("league_code") or "").lower(),
@@ -263,16 +263,17 @@ def dedupe_forms(client, log=print):
 INJURY_DEDUPE_MAX = 120   # bounded deletes/cycle — heals the store slowly
                           # (3 writers have overlapped since mid-Oct)
 
-def dedupe_injuries(client, log=print):
+def dedupe_injuries(client, log=print, rows=None):
     """The Injury entity is written by several sources (worker + app-side
     automations), so the same (league, team, player) exists 2-4x. A player
     is one person: keep the freshest copy per canonical key, delete the
     rest. Bounded to INJURY_DEDUPE_MAX deletions per cycle."""
     from collections import defaultdict
     from nova import matching as _m
-    rows = client.list_all("Injury", fields=["id", "league_code",
-                                             "team_abbr", "player_name",
-                                             "updated_date", "created_date"])
+    if rows is None:
+        rows = client.list_all("Injury", fields=["id", "league_code",
+                                                 "team_abbr", "player_name",
+                                                 "updated_date", "created_date"])
     key = defaultdict(list)
     for r in rows:
         lg = str(r.get("league_code") or "").lower()
@@ -292,6 +293,25 @@ def dedupe_injuries(client, log=print):
         log(f"injury dedupe: deleted {len(doomed)} duplicate rows "
             f"(bounded at {INJURY_DEDUPE_MAX}/cycle)")
     return len(doomed)
+
+ODDS_SHARED_FIELDS = ["id", "game_id", "book", "market_type", "home_line",
+                      "away_line", "over_line", "under_line", "home_price",
+                      "away_price", "over_price", "under_price", "is_current",
+                      "created_date", "snapshot_time", "updated_date"]
+
+
+def load_odds_once(client, cache=None):
+    """OddsSnapshot is the heaviest entity in the app (~21k rows, ~5 pages).
+    Both the cycle's market read and the odds janitor need it, and each used
+    to fetch the whole table separately - the single largest source of the
+    read-traffic 429s. Fetch once per run and share the rows."""
+    if cache is not None and cache.get("rows") is not None:
+        return cache["rows"]
+    rows = client.list_all("OddsSnapshot", fields=ODDS_SHARED_FIELDS)
+    if cache is not None:
+        cache["rows"] = rows
+    return rows
+
 
 SPORT_BY_LEAGUE = {"nfl": "football", "ncaaf": "football",
                    "nba": "basketball", "ncaab": "basketball",
@@ -329,7 +349,7 @@ def normalize_league_codes(client, log=print, rows=None):
     return len(patches)
 
 
-def prune_stale_injuries(client, days=10, limit=300, log=print):
+def prune_stale_injuries(client, days=10, limit=300, log=print, rows=None):
     """The Injury entity accumulates every historical report (audit Oct 28
     2026: NFL had 853 rows, median age 8.8 days, 481 older than a week).
     Stale rows are BAD DATA, not history: a player marked OUT three weeks
@@ -339,7 +359,9 @@ def prune_stale_injuries(client, days=10, limit=300, log=print):
     Bounded so a cycle never deletes more than `limit` rows."""
     from datetime import datetime, timezone, timedelta
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
-    rows = client.list_all("Injury", fields=["id", "updated_date", "created_date"])
+    if rows is None:
+        rows = client.list_all("Injury",
+                               fields=["id", "updated_date", "created_date"])
     doomed = []
     for r in rows:
         stamp = str(r.get("updated_date") or r.get("created_date") or "")
@@ -397,14 +419,14 @@ def normalize_current_statuses(client, log=print, rows=None):
     return len(patches)
 
 
-def dedupe_current_odds(client, log=print):
+def dedupe_current_odds(client, log=print, rows=None):
     """Multiple odds writers leave 2+ is_current rows per (game, book,
     market). Keep the newest snapshot, supersede the rest (is_current
     false — history preserved, never deleted)."""
     from collections import defaultdict
-    odds = client.list_all("OddsSnapshot", fields=["id", "game_id", "book",
-                                                   "market_type", "is_current",
-                                                   "snapshot_time", "updated_date"])
+    odds = rows if rows is not None else client.list_all(
+        "OddsSnapshot", fields=["id", "game_id", "book", "market_type",
+                                "is_current", "snapshot_time", "updated_date"])
     grp = defaultdict(list)
     for o in odds:
         if not o.get("is_current") or not o.get("game_id"):
@@ -437,12 +459,12 @@ RATING_ALIASES = {
     ("nba", "UTA"): ("nba", "UTAH"), ("nhl", "LAK"): ("nhl", "LA"),
 }
 
-def ensure_rating_aliases(client, log=print):
+def ensure_rating_aliases(client, log=print, rows=None):
     """Games carry ESPN abbrs (SAS/PHO/...); TeamRating uses its own
     convention (SA/PHX/...). Frontends join by abbr, so mirror each
     canonical rating row under the ESPN-style alias abbr."""
     have = {}
-    for r in client.list_all("TeamRating"):
+    for r in (rows if rows is not None else client.list_all("TeamRating")):
         k = (str(r.get("league_code") or "").lower(),
              str(r.get("team_abbr") or "").upper())
         if k not in have:

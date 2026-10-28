@@ -16,6 +16,7 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 import json
 import sys
+import time
 
 from nova import (config, espn, odds, reads, llm, enrich, props, web, answers,
                   grades, janitor, research, synthesis, versioning, llm_queue,
@@ -108,6 +109,7 @@ def run(dry=None):
             log("form", f"teams_map {_lg} failed (non-fatal): {e}")
     log("form", f"name->abbr maps: "
         + ", ".join(f"{k}:{len(v)}" for k, v in name_map.items()))
+    odds_cache = {}          # one full odds read per run, shared with the janitor
     existing_reads = client.list_all("MarketNovaRead", fields=[
         "id", "game_id", "market_type", "is_current", "status", "league_code", "sport",
         "marketnova_true_line", "raw_edge", "what_the_book_is_doing", "one_line_read", "thesis_json",
@@ -117,7 +119,7 @@ def run(dry=None):
     existing_analysis = client.list_all("Analysis", fields=["id", "game_id", "created_date"])
     existing_injuries = client.list_all("Injury", fields=[
         "id", "league_code", "team_abbr", "player_name", "status", "severity",
-        "injury_type", "impact_rating"])
+        "injury_type", "impact_rating", "updated_date", "created_date"])
     injuries_all = existing_injuries
     log("load", f"{len(games)} games, {len(ratings)} ratings, {len(forms)} form rows, "
           f"{len(existing_reads)} reads, {len(existing_injuries)} injuries, "
@@ -149,11 +151,7 @@ def run(dry=None):
             for ev in odds.fetch_odds(league):
                 desired.extend(odds.flatten_event(ev))
         if desired and not odds_by_game:
-            all_odds = client.list_all("OddsSnapshot", fields=[
-                "id", "game_id", "book", "market_type", "home_line",
-                "away_line", "over_line", "under_line", "home_price",
-                "away_price", "over_price", "under_price", "is_current",
-                "created_date"])
+            all_odds = janitor.load_odds_once(client, odds_cache)
             for o in all_odds:
                 odds_by_game.setdefault(o.get("game_id"), []).append(o)
         existing = [o for rows in odds_by_game.values() for o in rows]
@@ -1046,16 +1044,20 @@ def run(dry=None):
     #  unattached copies are deleted, attached ones are logged for merge)
     try:
         odds_ids = set(odds_by_game.keys())
-        # a fresh odds view when the league loop never loaded one
         candidates = [g for g in games
                       if not g.get("provider_game_id") and g.get("external_id")]
         if candidates and not odds_ids:
-            odds_ids = set(o.get("game_id") for o in client.list_all(
-                "OddsSnapshot", fields=["id", "game_id"]))
-        # refresh games: the plan may have linked/created games this cycle
-        fresh_games = client.list_all("Game", fields=[
-            "id", "provider_game_id", "external_id", "home_team",
-            "away_team", "game_date", "status", "created_date"])
+            odds_ids = set(o.get("game_id") for o in odds_cache.get("rows")
+                           or janitor.load_odds_once(client, odds_cache))
+        # refresh games only when this cycle created or linked one; otherwise
+        # the loaded slate is already authoritative (a blind re-list was a
+        # full 1k-row Game read every 30 minutes)
+        if all_game_creates or all_link_updates:
+            fresh_games = client.list_all("Game", fields=[
+                "id", "provider_game_id", "external_id", "home_team",
+                "away_team", "game_date", "status", "created_date"])
+        else:
+            fresh_games = list(games) + list(all_game_creates or [])
         n_del, n_man = janitor.sweep(client, fresh_games, existing_reads,
                                      odds_ids, log=lambda m: log("janitor", m))
         if n_del or n_man:
@@ -1072,22 +1074,40 @@ def run(dry=None):
         except Exception as e:
             log("janitor", f"merge failed (non-fatal): {e}")
         # ---- data-level self-heal sweeps (idempotent, every cycle) ----
+        # Rotation: the 30-min cadence makes some heals pointless every run.
+        # Cheap in-memory passes (forms/statuses/leagues) still run every
+        # cycle; the bounded-delete heals rotate so no single cycle carries
+        # the whole janitor.
+        slot = int(time.time() // 1800)
+        _rot = lambda n, i: slot % n == i
         try:
-            janitor.dedupe_forms(client, log=lambda m: log("janitor", m))
+            janitor.dedupe_forms(client, log=lambda m: log("janitor", m),
+                                 rows=forms)
             janitor.normalize_league_codes(client, log=lambda m: log("janitor", m),
                                           rows=existing_reads)
             janitor.normalize_current_statuses(client, log=lambda m: log("janitor", m),
                                               rows=existing_reads)
-            janitor.prune_stale_injuries(client, log=lambda m: log("janitor", m))
-            janitor.dedupe_injuries(client, log=lambda m: log("janitor", m))
         except Exception as e:
-            log("janitor", f"forms dedupe failed (non-fatal): {e}")
+            log("janitor", f"form/read heals failed (non-fatal): {e}")
         try:
-            janitor.dedupe_current_odds(client, log=lambda m: log("janitor", m))
+            if _rot(2, 0):
+                janitor.prune_stale_injuries(client, log=lambda m: log("janitor", m),
+                                            rows=existing_injuries)
+            else:
+                janitor.dedupe_injuries(client, log=lambda m: log("janitor", m),
+                                        rows=existing_injuries)
+        except Exception as e:
+            log("janitor", f"injury heals failed (non-fatal): {e}")
+        try:
+            if _rot(3, 1):
+                janitor.dedupe_current_odds(client, log=lambda m: log("janitor", m),
+                                            rows=janitor.load_odds_once(
+                                                client, odds_cache))
         except Exception as e:
             log("janitor", f"odds dedupe failed (non-fatal): {e}")
         try:
-            janitor.ensure_rating_aliases(client, log=lambda m: log("janitor", m))
+            janitor.ensure_rating_aliases(client, log=lambda m: log("janitor", m),
+                                         rows=ratings)
         except Exception as e:
             log("janitor", f"rating aliases failed (non-fatal): {e}")
     except Exception as e:
