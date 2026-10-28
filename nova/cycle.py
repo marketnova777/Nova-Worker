@@ -583,6 +583,7 @@ def run(dry=None):
             "market_line": result.get("market_line"),
                 "true_line_value": result.get("true_line"),
             "fair_price": result.get("true_line"),
+            "edge_unit": "POINTS",
             "edge_value": result.get("edge_value"),
                 "market_odds": result.get("market_odds"),
             "edge_score_display": result.get("edge_score_display"),
@@ -655,7 +656,7 @@ def run(dry=None):
                 "what_the_book_is_doing", "one_line_read",
                 # price-locked fields change in lockstep with the numbers —
                 # no extra write churn, but keep the page current
-                "edge_value", "edge_score_display", "edge_direction", "market_odds",
+                "edge_value", "edge_unit", "edge_score_display", "edge_direction", "market_odds",
                 "minimum_playable_price", "playable_until",
                 "key_number_quality", "line_movement_direction", "sharp_resistance", "public_bias",
                 "game_state_support", "regression_support", "weather", "lineup_status",
@@ -711,7 +712,8 @@ def run(dry=None):
                 "market_line": res.get("market_line"),
                 "true_line_value": res.get("true_line"),
                 "fair_price": res.get("true_line"),
-                "edge_value": res.get("edge_value"),
+                "edge_value": res.get("edge_value", res.get("raw_edge")),
+                "raw_edge": res.get("raw_edge"),
                 "edge_unit": res.get("edge_unit"),
                 "edge_score_display": res.get("edge_score_display"),
                 "edge_direction": res.get("edge_direction"),
