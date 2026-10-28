@@ -19,6 +19,7 @@ from nova import config
 
 class Base44Client:
     def __init__(self):
+        self.rows_read = 0
         self.writes = 0
         self.reads = 0
 
@@ -78,8 +79,8 @@ class Base44Client:
             if status != 200:
                 raise RuntimeError(f"list {entity} failed {status}: {body}")
             self.reads += 1
-            self.rows_read = getattr(self, "rows_read", 0) + len(recs)
             recs = body if isinstance(body, list) else body.get("data", [])
+            self.rows_read = getattr(self, "rows_read", 0) + len(recs)
             out.extend(recs)
             if len(recs) < page:
                 return out
