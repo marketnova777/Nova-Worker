@@ -34,7 +34,9 @@ def _injury_details(game, injuries, name_map=None):
     from nova import matching as _m
     out = {"home": [], "away": []}
     lg_raw = str(game.get("league_code") or game.get("sport") or "")
-    lg = lg_raw.upper()
+    # canonical league code is lowercase (Oct 28 2026); injury rows are
+    # lowercased below, so both sides of the compare must agree
+    lg = lg_raw.lower()
     lg_map = (name_map or {}).get(lg_raw.lower()) or {}
     for side in ("home", "away"):
         target = _m.canon(game.get(f"{side}_team") or game.get(f"{side}_team_name") or "", lg)
@@ -43,7 +45,7 @@ def _injury_details(game, injuries, name_map=None):
         if not target:
             continue
         for i in injuries or []:
-            il = str(i.get("league_code") or "").upper()
+            il = str(i.get("league_code") or "").lower()
             if il and il != lg:
                 continue
             if _m.canon(i.get("team_abbr") or i.get("team_name") or "", lg) == target:
@@ -571,8 +573,8 @@ def run(dry=None):
                 "analysis_version": "V3",
             # league_code/sport are REQUIRED by the live MarketNovaRead
             # schema; patches ignore them (changed_fields uses its own list)
-            "league_code": str(g.get("league_code") or g.get("sport") or "").upper(),
-            "sport": str(g.get("sport") or g.get("league_code") or "").upper(),
+            "league_code": str(g.get("league_code") or g.get("sport") or "").lower(),
+            "sport": str(g.get("sport") or g.get("league_code") or "").lower(),
             "status": result["status"],
             "marketnova_true_line": result.get("true_line"),
             "raw_edge": result.get("raw_edge"),
@@ -704,8 +706,8 @@ def run(dry=None):
                              f"AWAITING DATA ({res.get('reason', '')[:80]})")
             desired_alt = {                "writer_id": "nova-worker-github",
                 "analysis_version": "V3",
-                "league_code": str(g.get("league_code") or g.get("sport") or "").upper(),
-                "sport": str(g.get("sport") or g.get("league_code") or "").upper(),
+                "league_code": str(g.get("league_code") or g.get("sport") or "").lower(),
+                "sport": str(g.get("sport") or g.get("league_code") or "").lower(),
                 "status": res["status"],
                 "marketnova_true_line": res.get("true_line"),
                 "raw_edge": res.get("raw_edge"),
@@ -788,7 +790,7 @@ def run(dry=None):
                 doing, one_line = richer
             log("read", f"NEW read for {payload.get('away_team')}@{payload.get('home_team')}: {result['status']}")
             result_true_by_new[(li, ci)] = result.get("true_line")
-            lg_code = str(payload.get("league_code") or payload.get("sport") or "").upper()
+            lg_code = str(payload.get("league_code") or payload.get("sport") or "").lower()
             read_patches.append(("__new_game__", (li, ci), "spread", {
                 "league_code": lg_code,
                 "sport": lg_code,
@@ -855,8 +857,8 @@ def run(dry=None):
                 if not res or res.get("status") == "AWAITING DATA":
                     continue
                 read_patches.append(("__new_game__", (li, ci), mtype, {
-                    "league_code": str(payload.get("league_code") or "").upper(),
-                    "sport": str(payload.get("sport") or "").upper(),
+                    "league_code": str(payload.get("league_code") or "").lower(),
+                    "sport": str(payload.get("sport") or "").lower(),
                     "status": res["status"],
                     "marketnova_true_line": res.get("true_line"),
                     "raw_edge": res.get("raw_edge"),
@@ -1072,6 +1074,7 @@ def run(dry=None):
         # ---- data-level self-heal sweeps (idempotent, every cycle) ----
         try:
             janitor.dedupe_forms(client, log=lambda m: log("janitor", m))
+            janitor.normalize_league_codes(client, log=lambda m: log("janitor", m))
             janitor.normalize_current_statuses(client, log=lambda m: log("janitor", m))
             janitor.prune_stale_injuries(client, log=lambda m: log("janitor", m))
             janitor.dedupe_injuries(client, log=lambda m: log("janitor", m))

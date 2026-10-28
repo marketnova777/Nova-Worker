@@ -293,6 +293,41 @@ def dedupe_injuries(client, log=print):
             f"(bounded at {INJURY_DEDUPE_MAX}/cycle)")
     return len(doomed)
 
+SPORT_BY_LEAGUE = {"nfl": "football", "ncaaf": "football",
+                   "nba": "basketball", "ncaab": "basketball",
+                   "wnba": "basketball", "nhl": "hockey", "mlb": "baseball"}
+
+
+def normalize_league_codes(client, log=print):
+    """Canonical league_code is lowercase everywhere (Game rows, matching,
+    ESPN configs, prop slugs). A writer that uppercased it split the board
+    in two: the UI filters reads by lowercase league, so uppercase rows
+    silently vanish from their sport tab. Lowercase every current read and
+    fill `sport` with the sport name (not the league code). History is
+    left alone."""
+    rows = client.list_all("MarketNovaRead",
+                           fields=["id", "is_current", "league_code", "sport"])
+    patches = []
+    for r in rows:
+        if not r.get("is_current"):
+            continue
+        lg = str(r.get("league_code") or "").strip()
+        want_lg = lg.lower()
+        want_sport = SPORT_BY_LEAGUE.get(want_lg)
+        patch = {"id": r["id"]}
+        if lg != want_lg:
+            patch["league_code"] = want_lg
+        if want_sport and str(r.get("sport") or "").lower() != want_sport:
+            patch["sport"] = want_sport
+        if len(patch) > 1:
+            patches.append(patch)
+    if patches:
+        client.bulk_put("MarketNovaRead", patches)
+        log(f"league normalize: fixed {len(patches)} current read(s) "
+            f"(lowercase league_code + sport name)")
+    return len(patches)
+
+
 def prune_stale_injuries(client, days=10, limit=300, log=print):
     """The Injury entity accumulates every historical report (audit Oct 28
     2026: NFL had 853 rows, median age 8.8 days, 481 older than a week).
