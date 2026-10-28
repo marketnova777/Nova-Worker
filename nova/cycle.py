@@ -665,7 +665,11 @@ def run(dry=None):
                 # construction telemetry (form/injury/rest/weather stacks):
                 # WITHOUT this the read keeps the pre-construction telemetry
                 # forever even after the engine starts firing (fixed Oct 22)
-                "data_quality_json"])
+                "data_quality_json",
+                # decision fields that were create-only and went stale on
+                # every existing read (audit Oct 28 2026)
+                "invalidators", "true_line_value", "fair_price",
+                "market_psychology", "next_trigger", "confidence"])
             # self-heal: reads written before answer packs existed carry no
             # thesis_json; if fields are otherwise unchanged the read would
             # never be rewritten — force the pack in so no read is pack-less
@@ -745,7 +749,7 @@ def run(dry=None):
                     "minimum_playable_price", "playable_until",
                     "invalidators", "why_market_here", "true_line_basis",
                     "data_confidence", "buy_to", "thesis", "risk",
-                    "data_quality_json"])
+                    "data_quality_json", "next_trigger", "confidence"])
                 if alt_patch:
                     read_patches.append((cur_alt_row["id"], g["id"], mtype, alt_patch))
     # first-cycle reads for games created THIS run — they'd otherwise sit
