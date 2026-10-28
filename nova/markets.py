@@ -48,10 +48,13 @@ def _fmt_amer(price):
 # deviations; documented approximation, honest telemetry).
 # ---------------------------------------------------------------------------
 MARGIN_SIGMA = {
+    # priors only — compute_ml_read calibrates per game from the market's
+    # own spread<->ML pair and shrinks toward these (Oct 28 2026: NHL/MLB
+    # were ~40% too tight, manufacturing +10-15% fake ML edges)
     "nfl": 13.2, "ncaaf": 16.5,
     "nba": 11.8, "ncaab": 11.0, "wnba": 10.5,
-    "nhl": 2.15,
-    "mlb": 3.0,
+    "nhl": 3.30,
+    "mlb": 5.00,
 }
 DEFAULT_SIGMA = 12.0
 
@@ -73,6 +76,9 @@ STATUS_RANK = {"PASS": 0, "MONITOR": 1, "PLAY": 3}
 # fair-probability band where the normal margin model is trusted to
 # carry action weight on ML reads
 ML_TRUST_BAND = (0.15, 0.85)
+# a published ML edge (probability points) beyond this is a model
+# artifact from the spread->ML conversion, not market disagreement
+ML_EDGE_SANITY = 10.0
 
 
 # ---------------------------------------------------------------------------
@@ -280,6 +286,33 @@ def compute_total_read(game, form, market_rows, weather=None,
 # ---------------------------------------------------------------------------
 # MONEYLINES
 # ---------------------------------------------------------------------------
+def _norm_ppf(p):
+    """Inverse standard normal CDF (Acklam rational approximation)."""
+    if p <= 0.0 or p >= 1.0:
+        raise ValueError("p out of (0,1)")
+    a = [-3.969683028665376e+01, 2.209460984245205e+02, -2.759285104469687e+02,
+         1.383577518672690e+02, -3.066479806614716e+01, 2.506628277459239e+00]
+    b = [-5.447609879822406e+01, 1.615858368580409e+02, -1.556989798598866e+02,
+         6.680131188771972e+01, -1.328068155288572e+01]
+    c = [-7.784894002430293e-03, -3.223964580411365e-01, -2.400758277161838e+00,
+         -2.549732539343734e+00, 4.374664141464968e+00, 2.938163982698783e+00]
+    d = [7.784695709041462e-03, 3.224671290700398e-01, 2.445134137142996e+00,
+         3.754408661907416e+00]
+    p_low, p_high = 0.02425, 1 - 0.02425
+    if p < p_low:
+        q = math.sqrt(-2 * math.log(p))
+        return (((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5]) / \
+               ((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1)
+    if p > p_high:
+        q = math.sqrt(-2 * math.log(1 - p))
+        return -(((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5]) / \
+                ((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1)
+    q = p - 0.5
+    r = q * q
+    return (((((a[0]*r+a[1])*r+a[2])*r+a[3])*r+a[4])*r+a[5])*q / \
+           (((((b[0]*r+b[1])*r+b[2])*r+b[3])*r+b[4])*r+1)
+
+
 def _american_to_prob(price):
     """American odds -> implied win probability (with vig)."""
     try:
@@ -318,7 +351,50 @@ def compute_ml_read(game, true_spread, market_rows):
     devig_home = home_p / (home_p + away_p)
 
     league_l = str(game.get("league_code") or game.get("sport") or "").lower()
-    sigma = MARGIN_SIGMA.get(league_l, DEFAULT_SIGMA)
+    prior_sigma = MARGIN_SIGMA.get(league_l, DEFAULT_SIGMA)
+
+    # --- per-game margin sigma from THIS game's own spread<->ML pair ---
+    # The market's ML is the market's own win-probability curve for its own
+    # spread: invert it to recover the implied margin sigma, then shrink
+    # toward the league prior. This removes the cross-sport calibration
+    # error that produced impossible ML edges (Oct 28 2026).
+    sigma = prior_sigma
+    mkt_spread = None
+    try:
+        sp_row = (market_rows or {}).get("spread") or {}
+        if sp_row.get("market_line") is not None:
+            mkt_spread = float(sp_row["market_line"])
+    except (TypeError, ValueError):
+        mkt_spread = None
+    ml_pair_conflict = None
+    # derive only where the line/devig pair is informative: near pick'em
+    # the implied sigma explodes and the derivation is noise
+    if mkt_spread is not None and abs(mkt_spread) >= 1.0 and 0.22 <= devig_home <= 0.78:
+        try:
+            z = _norm_ppf(devig_home)
+            margin = -mkt_spread            # home margin implied by the line
+            if abs(z) > 1e-6 and margin / z > 0:
+                sigma_game = margin / z     # positive implied sigma
+                lo, hi = 0.50 * prior_sigma, 2.0 * prior_sigma
+                if sigma_game < lo or sigma_game > hi:
+                    # the game's own spread and ML say different things
+                    # about its margin curve (different books/times) —
+                    # a data conflict, never an edge
+                    ml_pair_conflict = sigma_game
+                else:
+                    sigma = 0.7 * sigma_game + 0.3 * prior_sigma
+        except (ValueError, ZeroDivisionError):
+            pass
+    if ml_pair_conflict is not None:
+        return {"status": "AWAITING DATA",
+                "reason": (f"Spread {mkt_spread:+.1f} and ML-implied curve "
+                           f"(sigma {ml_pair_conflict:.1f} vs league "
+                           f"{prior_sigma:.1f}) disagree — cross-market data "
+                           "conflict, not an edge."),
+                "raw_edge": None, "true_line": None,
+                "market_line": ml_row.get("home_price"),
+                "market_odds": ml_row.get("home_price"),
+                "edge_unit": "PROBABILITY"}
     # true spread is home-perspective (negative = home favored); expected
     # home margin = -spread; P(home wins) = Phi(margin / sigma)
     fair_home = 0.5 * (1 + math.erf((-true_spread / sigma) / math.sqrt(2)))
@@ -326,6 +402,15 @@ def compute_ml_read(game, true_spread, market_rows):
     edge_home = (fair_home - devig_home) * 100.0     # probability points
     value_side = "home" if edge_home > 0 else "away"
     raw_edge = round(abs(edge_home), 2)
+    if raw_edge > ML_EDGE_SANITY:
+        return {"status": "AWAITING DATA",
+                "reason": (f"Spread-derived ML edge {raw_edge:.1f} pts is beyond the "
+                           f"sanity bound ({ML_EDGE_SANITY:.0f}) — cross-market "
+                           "conflict, not an edge."),
+                "raw_edge": raw_edge, "true_line": None,
+                "market_line": ml_row.get(f"{value_side}_price"),
+                "market_odds": ml_row.get(f"{value_side}_price"),
+                "edge_unit": "PROBABILITY"}
     fair_side = fair_home if value_side == "home" else 1 - fair_home
     book_side = devig_home if value_side == "home" else 1 - devig_home
     fair_amer = _prob_to_american(fair_side)
