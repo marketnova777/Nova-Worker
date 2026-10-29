@@ -5,10 +5,7 @@ name: Nova cycle
 # stays well inside free Actions minutes.
 on:
   schedule:
-    # every 15 min — GitHub free-tier scheduling delays/drops single-cron
-    # schedules unpredictably (observed 40-90 min gaps); the gate step skips
-    # dead slates in ~10s so extra fires are cheap and coverage stays dense
-    - cron: "*/15 * * * *"
+    - cron: "*/30 * * * *"
   workflow_dispatch: {}
 
 concurrency:
@@ -18,7 +15,7 @@ concurrency:
 jobs:
   cycle:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
