@@ -1,0 +1,17 @@
+name: Read schema probe
+on:
+  workflow_dispatch: {}
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Write / read-back canonical fields
+        env:
+          BASE44_SERVICE_TOKEN: ${{ secrets.BASE44_SERVICE_TOKEN }}
+          BASE44_APP_ID: ${{ secrets.BASE44_APP_ID }}
+        run: python tools/schema_probe.py
