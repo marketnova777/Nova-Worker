@@ -37,9 +37,9 @@ jobs:
           BASE44_SERVICE_TOKEN: ${{ secrets.BASE44_SERVICE_TOKEN }}
           BASE44_APP_ID: ${{ secrets.BASE44_APP_ID }}
           ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
-          LLM_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          LLM_PROVIDER: openai
-          LLM_MODEL: ${{ vars.LLM_MODEL || 'gpt-4o-mini' }}
+          # no model credential by owner instruction (Oct 31 2026): the
+          # research layer stays on deterministic narratives until one is
+          # provisioned. Do not point this at a personal key.
+          LLM_API_KEY: ""
           NOVA_SYNTH_MODE: ${{ vars.NOVA_SYNTH_MODE }}
         run: python run_cycle.py

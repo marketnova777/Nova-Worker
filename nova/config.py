@@ -18,9 +18,10 @@ ODDS_API_BASE = "https://api.the-odds-api.com/v4"
 
 # LLM provider for narrative fields — optional; if absent, reads use
 # deterministic template narratives derived from kernel decision fields.
+# Deliberately narrow: no ambient OPENAI_API_KEY fallback. The research
+# layer only runs on a credential explicitly provisioned to this worker.
 LLM_API_KEY = (os.environ.get("LLM_API_KEY")
-               or os.environ.get("OPENAI_API_KEY")
-               or os.environ.get("ANTHROPIC_API_KEY") or "")
+               or os.environ.get("NOVA_LLM_API_KEY") or "")
 # Provider is inferred from the credential shape unless pinned. OpenAI keys
 # start with "sk-" / "sk-proj-"; Anthropic keys with "sk-ant-".
 LLM_PROVIDER = (os.environ.get("LLM_PROVIDER")
