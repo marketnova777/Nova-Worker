@@ -1,0 +1,23 @@
+name: Nova LLM smoke
+# Manual only: proves a REAL model call end-to-end (grounded prompt, usage,
+# cost, latency, fabrication check) without touching game pricing.
+on:
+  workflow_dispatch: {}
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Real model call against a live read
+        env:
+          BASE44_SERVICE_TOKEN: ${{ secrets.BASE44_SERVICE_TOKEN }}
+          BASE44_APP_ID: ${{ secrets.BASE44_APP_ID }}
+          LLM_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          LLM_PROVIDER: openai
+          LLM_MODEL: ${{ vars.LLM_MODEL || 'gpt-4o-mini' }}
+        run: python -m nova.smoke_llm

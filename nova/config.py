@@ -18,8 +18,18 @@ ODDS_API_BASE = "https://api.the-odds-api.com/v4"
 
 # LLM provider for narrative fields — optional; if absent, reads use
 # deterministic template narratives derived from kernel decision fields.
-LLM_API_KEY = os.environ.get("LLM_API_KEY", "")  # Anthropic-style key
-LLM_MODEL = os.environ.get("LLM_MODEL", "claude-haiku-4-5")
+LLM_API_KEY = (os.environ.get("LLM_API_KEY")
+               or os.environ.get("OPENAI_API_KEY")
+               or os.environ.get("ANTHROPIC_API_KEY") or "")
+# Provider is inferred from the credential shape unless pinned. OpenAI keys
+# start with "sk-" / "sk-proj-"; Anthropic keys with "sk-ant-".
+LLM_PROVIDER = (os.environ.get("LLM_PROVIDER")
+                or ("anthropic" if LLM_API_KEY.startswith("sk-ant") else "openai")).strip().lower()
+LLM_MODEL = os.environ.get("LLM_MODEL") or (
+    "gpt-4o-mini" if LLM_PROVIDER == "openai" else "claude-sonnet-4-5")
+# list prices, USD per 1M tokens (override per deployment if they change)
+LLM_PRICE_IN = float(os.environ.get("LLM_PRICE_IN", "0.15"))
+LLM_PRICE_OUT = float(os.environ.get("LLM_PRICE_OUT", "0.60"))
 
 
 # LLM bridge (Base44 AI, Oct 16 2026): OpenAI is removed. The worker

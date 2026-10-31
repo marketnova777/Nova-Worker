@@ -295,15 +295,29 @@ def run(dry=None):
     # they are never loaded as patch targets (the writer mints its own
     # records instead of patching foreign ones). ----
     _V3 = {"PLAY", "LEAN", "MONITOR", "PASS", "NUMBER GONE", "AWAITING DATA"}
+    # ONE WRITER (Oct 31 2026): the sweep only knew about the retired v14
+    # pipeline, so a new in-app writer ("nova-in-app-engine", model_version
+    # v16-in-app-deterministic, trigger_source in_app_pricing_pass) took over
+    # the current slots and published states with NO Nova fair line. Any
+    # current read not authored by this worker is now superseded on sight.
+    WORKER_ID = "nova-worker-github"
+    foreign_writers = set()
     swept = set()
     for r in existing_reads:
         if not r.get("is_current"):
             continue
-        foreign = (str(r.get("writer_id") or "") == "nova-deterministic-pipeline"
-                   or str(r.get("analysis_version") or "").upper() == "V14")
+        wid = str(r.get("writer_id") or "").strip()
+        ver = str(r.get("analysis_version") or "").upper()
+        foreign = bool(wid and wid != WORKER_ID) or ver in ("V14", "DET-V1")
         if foreign or str(r.get("status") or "").strip().upper() not in _V3:
             stale_read_ids.append(r["id"])
             swept.add(r["id"])
+            if wid and wid != WORKER_ID:
+                foreign_writers.add(wid)
+    if foreign_writers:
+        log("read", f"ALIEN CURRENT WRITERS SUPERSEDED: {sorted(foreign_writers)} "
+                    f"({len(swept)} rows) — one-writer doctrine is being violated "
+                    f"by an app-side writer")
     if swept:
         log("read", f"foreign/v14 currents swept: {len(swept)}")
     current_alt = {}      # (game_id, market_type) -> current total/ML read
@@ -317,7 +331,7 @@ def run(dry=None):
                 # duplicate current: keep the WORKER-authored record,
                 # supersede the foreign one (worker fields win the slot)
                 keep, drop = current_reads[gid], r
-                if str(r.get("writer_id") or "") != "nova-deterministic-pipeline" and str(r.get("analysis_version") or "").upper() != "V14":
+                if str(r.get("writer_id") or "") == WORKER_ID:
                     keep, drop = r, current_reads[gid]
                 stale_read_ids.append(drop["id"])
                 current_reads[gid] = keep
@@ -329,7 +343,7 @@ def run(dry=None):
             key = (gid, mt)
             if key in current_alt:
                 keep, drop = current_alt[key], r
-                if str(r.get("writer_id") or "") != "nova-deterministic-pipeline" and str(r.get("analysis_version") or "").upper() != "V14":
+                if str(r.get("writer_id") or "") == WORKER_ID:
                     keep, drop = r, current_alt[key]
                 stale_read_ids.append(drop["id"])
                 current_alt[key] = keep
@@ -1041,6 +1055,41 @@ def run(dry=None):
             json.dump(prop_payloads, f, indent=1)
     log("props", f"{len(prop_payloads)} payloads | new {n_new_p}, upd {n_upd_p}"
         + ("" if prop_entity_ok else " — STAGED, entity missing"))
+    # ---------- write-back verification (schema-drift tripwire) ----------
+    # A previous release lost marketnova_true_line / true_line_value /
+    # fair_price from the entity schema. Writes "succeeded" but the fields
+    # were dropped, so the product showed states with no Nova price and
+    # nothing complained. Never again: the cycle re-reads what it wrote and
+    # fails loudly when a canonical field does not survive the round trip.
+    CANON = ("marketnova_true_line", "true_line_value", "fair_price",
+             "market_line", "status", "writer_id", "analysis_version")
+    schema_drop = []
+    try:
+        probe = client.list_all("MarketNovaRead", fields=list(CANON) + [
+            "id", "is_current", "market_type"], ) or []
+        worker_current = [r for r in probe
+                          if r.get("is_current")
+                          and str(r.get("writer_id") or "") == "nova-worker-github"
+                          and r.get("marketnova_true_line") is not None]
+        priced = [r for r in worker_current if r.get("market_line") is not None]
+        missing = [f for f in CANON if probe and f not in probe[0]]
+        if missing:
+            schema_drop = missing
+        elif worker_current and not priced:
+            schema_drop = ["marketnova_true_line present but never populated"]
+        log("verify", f"write-back: {len(worker_current)} worker currents carry a "
+                      f"fair line"
+                      + (f" | SCHEMA DROP: {schema_drop}" if schema_drop else ""))
+    except Exception as e:
+        log("verify", f"write-back check could not run (non-fatal): {e}")
+    if schema_drop:
+        print(f"::error title=MarketNovaRead schema drop::canonical fields missing "
+              f"after write: {schema_drop}. The entity schema changed and the "
+              f"worker's intelligence is being silently discarded.")
+        with open("schema_drop.json", "w") as f:
+            json.dump({"missing": schema_drop}, f)
+        return 3
+
     log("done", f"cycle complete: {client.writes} writes, {client.reads} reads, "
                 f"{getattr(client, 'rows_read', 0)} rows read")
 
