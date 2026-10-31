@@ -28,8 +28,17 @@ PROBE = {
 def main():
     c = Base44Client()
     created = c.create("MarketNovaRead", PROBE)
+    path = "single create"
     if not created:
-        print("::error title=probe::create refused — writer identity cannot publish")
+        # single-record create is refused for this identity; try the bulk
+        # endpoint the worker normally publishes through
+        made = c.bulk_create("MarketNovaRead", [dict(PROBE)])
+        created = made[0] if made else None
+        path = "bulk create"
+    print(f"write path: {path} | accepted: {bool(created)}")
+    if not created:
+        print("::error title=probe::neither create nor bulk_create permitted — "
+              "this identity cannot publish reads at all")
         return 1
     rid = created.get("id")
     print(f"probe created: {rid}")
