@@ -14,4 +14,4 @@ jobs:
         env:
           BASE44_SERVICE_TOKEN: ${{ secrets.BASE44_SERVICE_TOKEN }}
           BASE44_APP_ID: ${{ secrets.BASE44_APP_ID }}
-        run: python tools/schema_probe.py
+        run: python -c "import sys; sys.path.insert(0, '.'); exec(open('tools/schema_probe.py').read())"
