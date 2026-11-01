@@ -116,3 +116,15 @@ print(f"DELETE status={st_d} (probe record removed)")
 
 print(f"RESULT fails={fails}")
 sys.exit(1 if fails else 0)
+
+
+def read_visibility(c):
+    """Which collections can the worker's own credential actually see?"""
+    print("VISIBILITY (worker credential):")
+    for ent in ("Game", "TeamRating", "TeamForm", "OddsSnapshot", "Injury",
+                "MarketNovaRead", "Analysis", "Prop", "WeatherSnapshot"):
+        try:
+            rows = c.list_all(ent, fields=["id"])
+            print(f"  {ent:16s} rows={len(rows)}")
+        except Exception as e:
+            print(f"  {ent:16s} ERROR {str(e)[:60]}")
