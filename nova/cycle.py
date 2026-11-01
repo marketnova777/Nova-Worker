@@ -18,7 +18,7 @@ import json
 import sys
 import time
 
-from nova import (config, espn, odds, reads, llm, enrich, props, web, answers,
+from nova import (config, espn, odds, reads, llm, enrich, props, web, answers, publish,
                   grades, janitor, research, synthesis, versioning, llm_queue,
                   matching, markets as mktreads)
 from nova.api import Base44Client, changed_fields
@@ -928,7 +928,8 @@ def run(dry=None):
               f"{len(injury_upserts)} injuries, {len(travel_upserts)} travel, "
               f"{len(analysis_upserts)} analyses, {len(prop_payloads)} props")
         return
-    write_plan(client, league_plans, game_updates, read_patches, stale_read_ids)
+    write_plan(client, league_plans, game_updates, read_patches, stale_read_ids,
+               existing_reads=existing_reads)
     # ---------- enrichment upserts (delta-only) ----------
     wlatest, tlatest, alatest = {}, {}, {}
     for r in existing_weather:
@@ -1190,7 +1191,8 @@ def supersede_finals(games, current_reads, terminal=("final",) + tuple(config.TE
     return retire, cleaned
 
 
-def write_plan(client, league_plans, game_updates, read_patches, stale_read_ids=()):
+def write_plan(client, league_plans, game_updates, read_patches, stale_read_ids=(),
+               existing_reads=None):
     """Dispatch the planned writes. league_plans is [(gc, lu, sup, nr), ...]
     IN LEAGUE ORDER — game_ref create indices are LOCAL to their league's
     game_creates list, so games are created and their odds rows attached
@@ -1247,10 +1249,20 @@ def write_plan(client, league_plans, game_updates, read_patches, stale_read_ids=
                 "game_id": gid, "is_current": True, "market_type": mtype, **patch})
         else:
             read_updates.append((rid, patch))
-    if read_creates:
-        client.bulk_create("MarketNovaRead", read_creates)
-    if read_updates:
-        client.bulk_put("MarketNovaRead", read_updates)
+    # ---------- canonical publication (single choke point) ----------
+    # Every read write goes through publish.publish_reads: canonical
+    # convention applied, contract validated, unchanged records skipped,
+    # batches paced under the platform write budget, and routed through the
+    # trusted publishCanonicalReads function when it is configured.
+    pub = publish.publish_reads(client, read_creates, read_updates,
+                                existing=existing_reads, log=log)
+    log("publish", f"path={pub['path']} attempted={pub['attempted']} "
+                   f"accepted={pub['accepted']} rejected={pub['rejected']} "
+                   f"unchanged={pub['skipped_unchanged']} warnings={pub['warnings']}")
+    for err in pub["errors"][:5]:
+        log("publish", f"rejected {err}")
+    if pub["rejected"] and not pub["accepted"]:
+        print("::error title=publication::every canonical read was rejected")
 
 
 if __name__ == "__main__":
