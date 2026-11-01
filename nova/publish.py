@@ -16,6 +16,10 @@ from nova import canonical
 BATCH = int(os.environ.get("NOVA_PUBLISH_BATCH", "100"))
 MAX_WRITES_PER_MIN = int(os.environ.get("NOVA_PUBLISH_MAX_PER_MIN", "300"))
 PUBLISH_URL = os.environ.get("NOVA_PUBLISH_URL", "").strip()
+# Owner decision 2026-11-01: nova-in-app-engine v16 is the single
+# canonical publisher. Set NOVA_PUBLISH_ENABLED=true only after a
+# validated cutover; otherwise this worker researches, never publishes.
+PUBLISH_ENABLED = os.environ.get("NOVA_PUBLISH_ENABLED", "false").strip().lower() == "true"
 PUBLISH_SECRET = os.environ.get("NOVA_PUBLISH_SECRET", "").strip()
 WRITER_ID = "nova-worker-github"
 TOUCH = ("marketnova_true_line", "true_line_value", "fair_price",
@@ -110,6 +114,14 @@ def publish_reads(client, creates, updates, existing=None, log=print):
                              **{k: merged[k] for k in TOUCH if k in merged}}))
 
     s["attempted"] = len(norm_c) + len(norm_u)
+
+    if not PUBLISH_ENABLED:
+        # Retired canonical path: the in-app engine publishes. This worker
+        # computes and researches only, so nothing is sent anywhere.
+        s["path"] = "disabled"
+        s["skipped_unchanged"] += s["attempted"]
+        s["attempted"] = 0
+        return s
 
     if PUBLISH_URL and PUBLISH_SECRET:
         s["path"] = "service"
