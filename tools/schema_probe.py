@@ -50,6 +50,10 @@ while True:
     skip += 1000
 cur = [r for r in rows if r.get("is_current")]
 print(f"COVERAGE total_rows={len(rows)} current={len(cur)}")
+try:
+    read_visibility(c)
+except Exception as _e:
+    print("visibility check failed:", _e)
 print("  writers:", dict(Counter(str(r.get("writer_id")) for r in cur)))
 per = defaultdict(lambda: {"n": 0, "line": 0, "prob": 0, "fair": 0, "buy": 0})
 for r in cur:
@@ -117,7 +121,6 @@ print(f"DELETE status={st_d} (probe record removed)")
 print(f"RESULT fails={fails}")
 sys.exit(1 if fails else 0)
 
-
 def read_visibility(c):
     """Which collections can the worker's own credential actually see?"""
     print("VISIBILITY (worker credential):")
@@ -128,3 +131,4 @@ def read_visibility(c):
             print(f"  {ent:16s} rows={len(rows)}")
         except Exception as e:
             print(f"  {ent:16s} ERROR {str(e)[:60]}")
+
