@@ -37,6 +37,8 @@ jobs:
           BASE44_SERVICE_TOKEN: ${{ secrets.BASE44_SERVICE_TOKEN }}
           BASE44_APP_ID: ${{ secrets.BASE44_APP_ID }}
           ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+          NOVA_PUBLISH_URL: https://base44.app/api/apps/69a8ac47693d18e683d96447/functions/publishCanonicalReads
+          NOVA_PUBLISH_SECRET: ${{ secrets.NOVA_PUBLISH_SECRET }}
           # no model credential by owner instruction (Oct 31 2026): the
           # research layer stays on deterministic narratives until one is
           # provisioned. Do not point this at a personal key.
